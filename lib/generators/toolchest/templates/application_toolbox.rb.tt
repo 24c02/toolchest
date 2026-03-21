@@ -1,0 +1,7 @@
+class ApplicationToolbox < Toolchest::Toolbox
+  # Shared behavior for all toolboxes.
+  # Like ApplicationController, but for MCP tools.
+  #
+  # Example:
+  #   alias_method :current_user, :auth
+end

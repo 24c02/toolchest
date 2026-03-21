@@ -1,0 +1,34 @@
+<div class="toolchest-authorized-apps">
+  <h1>Connected MCP Applications</h1>
+  <p>These applications have access to your account via MCP.</p>
+
+  <% if @applications.empty? %>
+    <p><em>No applications connected.</em></p>
+  <% else %>
+    <% @applications.each do |entry| %>
+      <div class="toolchest-app-entry">
+        <div>
+          <strong><%= entry[:application].name %></strong>
+          <div class="toolchest-app-scopes">
+            <% entry[:scopes].each do |scope| %>
+              <code><%= scope %></code>
+            <% end %>
+          </div>
+          <div class="toolchest-app-meta">
+            Connected <%= time_ago_in_words(entry[:connected_at]) %> ago
+            <% if entry[:last_used_at] %>
+              &middot; Last used <%= time_ago_in_words(entry[:last_used_at]) %> ago
+            <% end %>
+          </div>
+        </div>
+        <div>
+          <%= button_to "Revoke",
+                "#{request.script_name}/oauth/authorized_applications/#{entry[:application].id}",
+                method: :delete,
+                class: "toolchest-revoke-btn",
+                data: { turbo_confirm: "Revoke access for #{entry[:application].name}?" } %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>

@@ -1,0 +1,19 @@
+class <%= class_name %>Toolbox < <%= parent_class %>
+<% actions.each_with_index do |action, i| -%>
+<%= "\n" if i > 0 -%>
+  tool "TODO: describe <%= action %>" do
+    # param :id, :string, "TODO: add params"
+  end
+  def <%= action %>
+    # TODO: implement
+  end
+<% end -%>
+<% if actions.empty? -%>
+  # tool "Description" do
+  #   param :id, :string, "The ID"
+  # end
+  # def show
+  #   @record = Model.find(params[:id])
+  # end
+<% end -%>
+end

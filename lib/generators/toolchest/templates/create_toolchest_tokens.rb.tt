@@ -1,0 +1,16 @@
+class CreateToolchestTokens < ActiveRecord::Migration<%= migration_version %>
+  def change
+    create_table :toolchest_tokens do |t|
+      t.string :token_digest, null: false, index: { unique: true }
+      t.string :name
+      t.string :owner_type
+      t.string :owner_id
+      t.string :scopes
+      t.string :namespace, default: "default"
+      t.datetime :expires_at
+      t.datetime :last_used_at
+      t.datetime :revoked_at
+      t.timestamps
+    end
+  end
+end

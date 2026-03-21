@@ -1,0 +1,12 @@
+*.gem
+*.lock
+!Gemfile.lock
+log/
+tmp/
+pkg/
+spec/dummy/db/*.sqlite3
+spec/dummy/log/
+spec/dummy/tmp/
+.ruby-lsp/
+.bundle/
+coverage/

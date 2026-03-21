@@ -1,0 +1,496 @@
+require_relative "../rails_helper"
+require "base64"
+require "digest"
+require "json"
+
+RSpec.describe "OAuth flow", :db do
+  include Rack::Test::Methods
+
+  def app = Rails.application
+
+  def json_response = JSON.parse(last_response.body)
+
+  # --- DCR helpers ---
+
+  def register_client(name: "Test Client", redirect_uris: ["http://localhost:3000/callback"])
+    post "/mcp/oauth/register",
+      { client_name: name, redirect_uris: redirect_uris }.to_json,
+      "CONTENT_TYPE" => "application/json"
+    json_response
+  end
+
+  # --- PKCE helpers ---
+
+  def pkce_pair
+    verifier = SecureRandom.urlsafe_base64(32)
+    challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false)
+    [verifier, challenge]
+  end
+
+  # --- Auth stub ---
+
+  let(:fake_user) { Struct.new(:id).new(42) }
+
+  before do
+    Toolchest.configure do |c|
+      c.auth = :oauth
+      c.mount_path = "/mcp"
+      c.scopes = {
+        "orders:read" => "View orders",
+        "orders:write" => "Modify orders"
+      }
+      c.current_user_for_oauth { |_req| fake_user }
+    end
+  end
+
+  # ============================================================
+  # Dynamic Client Registration (RFC 7591)
+  # ============================================================
+
+  describe "POST /mcp/oauth/register" do
+    it "registers a new client" do
+      result = register_client
+      expect(last_response.status).to eq(201)
+      expect(result["client_id"]).to be_present
+      expect(result["client_name"]).to eq("Test Client")
+      expect(result["redirect_uris"]).to eq(["http://localhost:3000/callback"])
+    end
+
+    it "defaults client_name to MCP Client" do
+      post "/mcp/oauth/register",
+        { redirect_uris: ["http://localhost/cb"] }.to_json,
+        "CONTENT_TYPE" => "application/json"
+      expect(json_response["client_name"]).to eq("MCP Client")
+    end
+
+    it "rejects too many redirect URIs" do
+      uris = (1..11).map { |i| "http://localhost/cb#{i}" }
+      post "/mcp/oauth/register",
+        { client_name: "Bad", redirect_uris: uris }.to_json,
+        "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(400)
+      expect(json_response["error"]).to eq("invalid_client_metadata")
+    end
+
+    it "rejects overly long redirect URIs" do
+      post "/mcp/oauth/register",
+        { client_name: "Bad", redirect_uris: ["http://localhost/#{"a" * 2049}"] }.to_json,
+        "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(400)
+      expect(json_response["error"]).to eq("invalid_client_metadata")
+    end
+
+    it "truncates overly long client names" do
+      result = register_client(name: "A" * 300)
+      expect(last_response.status).to eq(201)
+      expect(result["client_name"].length).to be <= 255
+    end
+  end
+
+  # ============================================================
+  # Authorization Code Flow with PKCE
+  # ============================================================
+
+  describe "full authorization code flow" do
+    let(:verifier) { SecureRandom.urlsafe_base64(32) }
+    let(:challenge) { Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false) }
+    let(:client) { register_client }
+    let(:client_id) { client["client_id"] }
+    let(:redirect_uri) { "http://localhost:3000/callback" }
+
+    describe "GET /mcp/oauth/authorize" do
+      it "renders the consent screen" do
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(200)
+        expect(last_response.body).to include("Test Client")
+      end
+
+      it "returns 400 for unknown client_id" do
+        get "/mcp/oauth/authorize", {
+          client_id: "nonexistent",
+          redirect_uri: redirect_uri,
+          response_type: "code"
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_client")
+      end
+
+      it "returns 400 for mismatched redirect_uri" do
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: "http://evil.com/steal",
+          response_type: "code"
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_redirect_uri")
+      end
+
+      it "redirects to login when user is not authenticated" do
+        Toolchest.configure do |c|
+          c.auth = :oauth
+          c.mount_path = "/mcp"
+          c.current_user_for_oauth { |_req| nil }
+        end
+
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code"
+        }
+        expect(last_response.status).to eq(302)
+        expect(last_response.headers["Location"]).to include("/login")
+      end
+    end
+
+    describe "POST /mcp/oauth/authorize" do
+      it "redirects with an authorization code" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: "orders:read",
+          state: "xyz",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(302)
+        location = URI.parse(last_response.headers["Location"])
+        params = URI.decode_www_form(location.query).to_h
+        expect(params["code"]).to be_present
+        expect(params["state"]).to eq("xyz")
+      end
+    end
+
+    describe "DELETE /mcp/oauth/authorize" do
+      it "redirects with error=access_denied" do
+        delete "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          state: "xyz"
+        }
+        expect(last_response.status).to eq(302)
+        location = URI.parse(last_response.headers["Location"])
+        params = URI.decode_www_form(location.query).to_h
+        expect(params["error"]).to eq("access_denied")
+        expect(params["state"]).to eq("xyz")
+      end
+
+      it "returns 400 for unknown client_id" do
+        delete "/mcp/oauth/authorize", {
+          client_id: "nonexistent",
+          redirect_uri: redirect_uri
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_client")
+      end
+
+      it "omits state from redirect when not provided" do
+        delete "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri
+        }
+        expect(last_response.status).to eq(302)
+        location = URI.parse(last_response.headers["Location"])
+        params = URI.decode_www_form(location.query).to_h
+        expect(params["error"]).to eq("access_denied")
+        expect(params).not_to have_key("state")
+      end
+    end
+
+    describe "POST /mcp/oauth/token (authorization_code)" do
+      let(:auth_code) do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: "orders:read",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        location = URI.parse(last_response.headers["Location"])
+        URI.decode_www_form(location.query).to_h["code"]
+      end
+
+      it "exchanges code for tokens with valid PKCE" do
+        code = auth_code
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(200)
+        body = json_response
+        expect(body["access_token"]).to be_present
+        expect(body["refresh_token"]).to be_present
+        expect(body["token_type"]).to eq("bearer")
+        expect(body["expires_in"]).to be_a(Integer)
+      end
+
+      it "rejects invalid authorization code" do
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: "bogus",
+          redirect_uri: redirect_uri,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+
+      it "rejects wrong PKCE verifier" do
+        code = auth_code
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: "wrong_verifier"
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+        expect(json_response["error_description"]).to include("PKCE")
+      end
+
+      it "rejects mismatched redirect_uri" do
+        code = auth_code
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: "http://other.com/cb",
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+
+      it "rejects expired code" do
+        code = auth_code
+        # Expire the grant
+        Toolchest::OauthAccessGrant.update_all(expires_at: 1.hour.ago)
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+
+      it "revokes the code after exchange" do
+        code = auth_code
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(200)
+
+        # Second use should fail
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+
+      it "rejects unsupported grant type" do
+        post "/mcp/oauth/token", { grant_type: "client_credentials" }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("unsupported_grant_type")
+      end
+    end
+
+    describe "POST /mcp/oauth/token (refresh_token)" do
+      let(:tokens) do
+        code = auth_code
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        json_response
+      end
+
+      # Need auth_code for the chain
+      let(:auth_code) do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: "orders:read",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        location = URI.parse(last_response.headers["Location"])
+        URI.decode_www_form(location.query).to_h["code"]
+      end
+
+      it "refreshes tokens" do
+        refresh = tokens["refresh_token"]
+        post "/mcp/oauth/token", {
+          grant_type: "refresh_token",
+          refresh_token: refresh
+        }
+        expect(last_response.status).to eq(200)
+        body = json_response
+        expect(body["access_token"]).to be_present
+        expect(body["refresh_token"]).to be_present
+        expect(body["access_token"]).not_to eq(tokens["access_token"])
+      end
+
+      it "revokes old token after refresh" do
+        refresh = tokens["refresh_token"]
+        post "/mcp/oauth/token", {
+          grant_type: "refresh_token",
+          refresh_token: refresh
+        }
+        expect(last_response.status).to eq(200)
+
+        # Old refresh token should be revoked
+        post "/mcp/oauth/token", {
+          grant_type: "refresh_token",
+          refresh_token: refresh
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+
+      it "rejects invalid refresh token" do
+        post "/mcp/oauth/token", {
+          grant_type: "refresh_token",
+          refresh_token: "bogus"
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_grant")
+      end
+    end
+  end
+
+  # ============================================================
+  # Metadata Discovery
+  # ============================================================
+
+  describe "GET /.well-known/oauth-authorization-server" do
+    it "returns OAuth metadata" do
+      get "/.well-known/oauth-authorization-server/mcp"
+      expect(last_response.status).to eq(200)
+      body = json_response
+      expect(body["authorization_endpoint"]).to include("/mcp/oauth/authorize")
+      expect(body["token_endpoint"]).to include("/mcp/oauth/token")
+      expect(body["registration_endpoint"]).to include("/mcp/oauth/register")
+      expect(body["code_challenge_methods_supported"]).to eq(["S256"])
+      expect(body["scopes_supported"]).to include("orders:read", "orders:write")
+    end
+  end
+
+  describe "GET /.well-known/oauth-protected-resource" do
+    it "returns protected resource metadata" do
+      get "/.well-known/oauth-protected-resource/mcp"
+      expect(last_response.status).to eq(200)
+      body = json_response
+      expect(body["resource"]).to include("/mcp")
+      expect(body["bearer_methods_supported"]).to eq(["header"])
+    end
+  end
+
+  # ============================================================
+  # Authorized Applications
+  # ============================================================
+
+  describe "authorized applications" do
+    it "lists authorized apps after token exchange" do
+      verifier, challenge = pkce_pair
+      client = register_client
+      client_id = client["client_id"]
+      redirect_uri = "http://localhost:3000/callback"
+
+      # Authorize
+      post "/mcp/oauth/authorize", {
+        client_id: client_id,
+        redirect_uri: redirect_uri,
+        scope: "orders:read",
+        code_challenge: challenge,
+        code_challenge_method: "S256"
+      }
+      code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+      # Exchange
+      post "/mcp/oauth/token", {
+        grant_type: "authorization_code",
+        code: code,
+        redirect_uri: redirect_uri,
+        client_id: client_id,
+        code_verifier: verifier
+      }
+      expect(last_response.status).to eq(200)
+
+      # List
+      get "/mcp/oauth/authorized_applications"
+      expect(last_response.status).to eq(200)
+      expect(last_response.body).to include("Test Client")
+    end
+
+    it "revokes access when destroying an authorized app" do
+      verifier, challenge = pkce_pair
+      client = register_client
+      client_id = client["client_id"]
+      redirect_uri = "http://localhost:3000/callback"
+
+      # Full flow
+      post "/mcp/oauth/authorize", {
+        client_id: client_id,
+        redirect_uri: redirect_uri,
+        scope: "orders:read",
+        code_challenge: challenge,
+        code_challenge_method: "S256"
+      }
+      code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+      post "/mcp/oauth/token", {
+        grant_type: "authorization_code",
+        code: code,
+        redirect_uri: redirect_uri,
+        client_id: client_id,
+        code_verifier: verifier
+      }
+      access_token = json_response["access_token"]
+
+      # Revoke via authorized applications
+      oauth_app = Toolchest::OauthApplication.find_by(uid: client_id)
+      delete "/mcp/oauth/authorized_applications/#{oauth_app.id}"
+      expect(last_response.status).to eq(302)
+
+      # Token should now be revoked (active-scoped find returns nil)
+      expect(Toolchest::OauthAccessToken.find_by_token(access_token)).to be_nil
+    end
+  end
+
+  # ============================================================
+  # MCP Endpoint Auth
+  # ============================================================
+
+  describe "MCP endpoint with OAuth" do
+    it "returns 401 without a bearer token" do
+      post "/mcp", {}.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(401)
+      expect(last_response.headers["WWW-Authenticate"]).to include("Bearer")
+    end
+  end
+end

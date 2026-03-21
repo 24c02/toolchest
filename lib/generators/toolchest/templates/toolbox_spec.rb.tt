@@ -1,0 +1,23 @@
+require "rails_helper"
+
+RSpec.describe <%= class_name %>Toolbox, type: :toolbox do
+<% actions.each_with_index do |action, i| -%>
+<%= "\n" if i > 0 -%>
+  describe "#<%= action %>" do
+    it "works" do
+      call_tool "<%= file_path.gsub("/", "_") %>_<%= action %>",
+        params: {}
+
+      expect(tool_response).to be_success
+    end
+  end
+<% end -%>
+<% if actions.empty? -%>
+  # describe "#show" do
+  #   it "works" do
+  #     call_tool "<%= file_path.gsub("/", "_") %>_show", params: { id: "1" }
+  #     expect(tool_response).to be_success
+  #   end
+  # end
+<% end -%>
+end

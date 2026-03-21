@@ -1,0 +1,37 @@
+<%% # app/views/toolchest/oauth/authorizations/new.html.erb %>
+<%% # Ejected from toolchest. Customize to match your app's design. %>
+
+<div class="toolchest-consent">
+  <h1><%%= @client_name %> wants access to your account</h1>
+  <p>Make sure you trust this URL: <code><%%= @redirect_uri %></code></p>
+
+  <%% if @scope_list&.any? %>
+    <p>It's asking for:</p>
+    <ul>
+      <%% @scope_list.each do |s| %>
+        <li>
+          <strong><%%= s[:name] %></strong> &mdash; <%%= s[:description] %>
+        </li>
+      <%% end %>
+    </ul>
+  <%% end %>
+
+  <div class="toolchest-consent-actions" style="display: flex; gap: .5rem">
+    <%%= form_tag @authorize_url, method: :post do %>
+      <%% @oauth_params&.each do |key, value| %>
+        <%%= hidden_field_tag key, value %>
+      <%% end %>
+      <%% @scope_values&.each do |s| %>
+        <%%= hidden_field_tag "scope[]", s %>
+      <%% end %>
+      <%%= submit_tag "Authorize" %>
+    <%% end %>
+
+    <%%= form_tag @authorize_url, method: :delete do %>
+      <%% @oauth_params&.each do |key, value| %>
+        <%%= hidden_field_tag key, value %>
+      <%% end %>
+      <%%= submit_tag "Deny" %>
+    <%% end %>
+  </div>
+</div>
