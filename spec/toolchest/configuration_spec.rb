@@ -132,6 +132,36 @@ RSpec.describe Toolchest::Configuration do
     end
   end
 
+  describe "#optional_scopes" do
+    it "defaults to false" do
+      expect(config.optional_scopes).to be false
+    end
+  end
+
+  describe "#required_scopes" do
+    it "defaults to empty array" do
+      expect(config.required_scopes).to eq([])
+    end
+  end
+
+  describe "#allowed_scopes_for" do
+    it "stores and retrieves the block" do
+      config.allowed_scopes_for { |user, scopes| scopes }
+      expect(config.allowed_scopes_for).to be_a(Proc)
+    end
+  end
+
+  describe "#resolve_allowed_scopes" do
+    it "returns scopes unchanged when no block configured" do
+      expect(config.resolve_allowed_scopes(:user, %w[a b c])).to eq(%w[a b c])
+    end
+
+    it "calls the block with user and scopes" do
+      config.allowed_scopes_for { |user, scopes| scopes - ["admin"] }
+      expect(config.resolve_allowed_scopes(:user, %w[read admin])).to eq(%w[read])
+    end
+  end
+
   describe "mount_key" do
     it "stores the mount key as a symbol" do
       config = described_class.new(:admin)

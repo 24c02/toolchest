@@ -278,6 +278,17 @@ Scopes filter `tools/list` — clients only see tools their token allows.
 
 Disable: `config.filter_tools_by_scope = false`
 
+### Optional scopes (checkboxes on consent)
+
+```ruby
+config.optional_scopes = true                    # users can uncheck scopes (default: false, all-or-nothing)
+config.required_scopes = ["orders:read"]         # always granted, can't uncheck (default: [])
+config.allowed_scopes_for do |user, requested|   # per-user gating, hides scopes silently (default: show all)
+  user.admin? ? requested : requested - ["admin:write"]
+end
+```
+
+
 ## Multi-mount
 
 Separate endpoints with different auth, toolboxes, and scopes:

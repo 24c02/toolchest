@@ -2,33 +2,44 @@
   <h1><%= @client_name %> wants access to your account</h1>
   <p class="toolchest-redirect-uri">Make sure you trust this URL: <code><%= @redirect_uri %></code></p>
 
-  <% if @scope_list&.any? %>
-    <p>It's asking for:</p>
-    <ul class="toolchest-scope-list">
-      <% @scope_list.each do |s| %>
-        <li>
-          <strong><%= s[:name] %></strong> &mdash; <%= s[:description] %>
-        </li>
-      <% end %>
-    </ul>
+  <%= form_tag @authorize_url, method: :post do %>
+    <% @oauth_params&.each do |key, value| %>
+      <%= hidden_field_tag key, value %>
+    <% end %>
+    <%= hidden_field_tag "original_scope", @original_scope %>
+
+    <% if @scope_list&.any? %>
+      <p>It's asking for:</p>
+      <ul class="toolchest-scope-list">
+        <% @scope_list.each do |s| %>
+          <li>
+            <% if @optional %>
+              <label>
+                <%= check_box_tag "scope[]", s[:name], true,
+                    disabled: s[:required], id: "scope_#{s[:name].parameterize}" %>
+                <% if s[:required] %>
+                  <%= hidden_field_tag "scope[]", s[:name] %>
+                <% end %>
+                <strong><%= s[:name] %></strong> &mdash; <%= s[:description] %>
+              </label>
+            <% else %>
+              <%= hidden_field_tag "scope[]", s[:name] %>
+              <strong><%= s[:name] %></strong> &mdash; <%= s[:description] %>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    <% end %>
+
+    <div class="toolchest-consent-actions" style="display: flex; gap: .5rem">
+      <%= submit_tag "Authorize", class: "toolchest-authorize-btn" %>
+    </div>
   <% end %>
 
-  <div class="toolchest-consent-actions" style="display: flex; gap: .5rem">
-    <%= form_tag @authorize_url, method: :post do %>
-      <% @oauth_params&.each do |key, value| %>
-        <%= hidden_field_tag key, value %>
-      <% end %>
-      <% @scope_values&.each do |s| %>
-        <%= hidden_field_tag "scope[]", s %>
-      <% end %>
-      <%= submit_tag "Authorize", class: "toolchest-authorize-btn" %>
+  <%= form_tag @authorize_url, method: :delete do %>
+    <% @oauth_params&.each do |key, value| %>
+      <%= hidden_field_tag key, value %>
     <% end %>
-
-    <%= form_tag @authorize_url, method: :delete do %>
-      <% @oauth_params&.each do |key, value| %>
-        <%= hidden_field_tag key, value %>
-      <% end %>
-      <%= submit_tag "Deny", class: "toolchest-deny-btn" %>
-    <% end %>
-  </div>
+    <%= submit_tag "Deny", class: "toolchest-deny-btn" %>
+  <% end %>
 </div>

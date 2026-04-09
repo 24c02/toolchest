@@ -6,7 +6,8 @@ module Toolchest
                   :server_name, :server_version, :server_description, :server_instructions,
                   :scopes, :login_path, :additional_view_paths,
                   :access_token_expires_in, :toolboxes, :toolbox_module,
-                  :mount_key, :mount_path
+                  :mount_key, :mount_path,
+                  :optional_scopes, :required_scopes
     attr_reader :auth
 
     def initialize(mount_key = :default)
@@ -19,6 +20,9 @@ module Toolchest
       @scopes = {}
       @login_path = "/login"
       @authenticate_block = nil
+      @optional_scopes = false
+      @required_scopes = []
+      @allowed_scopes_for_block = nil
       @additional_view_paths = []
       @access_token_expires_in = 7200
       @toolboxes = nil
@@ -46,6 +50,18 @@ module Toolchest
     def authenticate_with(token)
       return nil unless @authenticate_block
       @authenticate_block.call(token)
+    end
+
+    def allowed_scopes_for(&block)
+      if block
+        @allowed_scopes_for_block = block
+      else
+        @allowed_scopes_for_block
+      end
+    end
+
+    def resolve_allowed_scopes(user, scopes)
+      @allowed_scopes_for_block ? @allowed_scopes_for_block.call(user, scopes) : scopes
     end
 
     def current_user_for_oauth(&block)

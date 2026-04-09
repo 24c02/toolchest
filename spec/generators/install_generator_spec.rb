@@ -73,9 +73,9 @@ RSpec.describe Toolchest::Generators::InstallGenerator do
       expect(content).to include("toolchest_oauth_access_grants")
     end
 
-    it "creates OAuth consent view" do
+    it "does not eject consent view (engine provides it)" do
       path = File.join(destination, "app/views/toolchest/oauth/authorizations/new.html.erb")
-      expect(File.exist?(path)).to be true
+      expect(File.exist?(path)).to be false
     end
 
     it "sets auth to :oauth in initializer" do

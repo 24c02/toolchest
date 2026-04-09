@@ -8,9 +8,18 @@ module Toolchest
       def new
         @client_name = @application.name
         @redirect_uri = params[:redirect_uri]
-        @scope_values = requested_scopes
-        @scope_list = @scope_values.map { |s|
-          { name: s, description: toolchest_config.scopes[s] || s }
+        @optional = toolchest_config.optional_scopes
+        @original_scope = requested_scopes.join(" ")
+
+        requested = requested_scopes
+        allowed = toolchest_config.resolve_allowed_scopes(@current_resource_owner, requested)
+        known = toolchest_config.scopes.keys
+        allowed = allowed & known if known.any?
+        required = Array(toolchest_config.required_scopes) & known
+        visible = (allowed | required).uniq
+
+        @scope_list = visible.map { |s|
+          { name: s, description: toolchest_config.scopes[s] || s, required: required.include?(s) }
         }
         @oauth_params = oauth_hidden_params
         @authorize_url = "#{request.script_name}/oauth/authorize"
@@ -27,11 +36,24 @@ module Toolchest
 
       # POST /mcp/oauth/authorize — approve and redirect with code
       def create
+        requested = original_requested_scopes
+        allowed = toolchest_config.resolve_allowed_scopes(@current_resource_owner, requested)
+        known = toolchest_config.scopes.keys
+        allowed = allowed & known if known.any?
+        required = Array(toolchest_config.required_scopes) & known
+
+        granted = if toolchest_config.optional_scopes
+          submitted = Array(params[:scope])
+          (submitted & allowed) | required
+        else
+          allowed | required
+        end
+
         grant = Toolchest::OauthAccessGrant.create_for(
           application: @application,
           resource_owner_id: current_resource_owner_id,
           redirect_uri: params[:redirect_uri],
-          scopes: Array(params[:scope]).join(" "),
+          scopes: granted.join(" "),
           mount_key: mount_key,
           code_challenge: params[:code_challenge],
           code_challenge_method: params[:code_challenge_method]
@@ -94,13 +116,28 @@ module Toolchest
         end
       end
 
-      def requested_scopes = (params[:scope] || "").split(" ")
+      def requested_scopes
+        scope = params[:scope]
+        case scope
+        when Array then scope.flat_map { |s| s.split(" ") }
+        when String then scope.split(" ")
+        else []
+        end
+      end
 
       def oauth_hidden_params
         params.to_unsafe_h.slice(
           "client_id", "state", "redirect_uri", "response_type", "response_mode",
           "access_type", "code_challenge", "code_challenge_method", "resource"
         )
+      end
+
+      def original_requested_scopes
+        if params[:original_scope].present?
+          params[:original_scope].split(" ")
+        else
+          requested_scopes
+        end
       end
 
       def build_redirect(base_uri, query_params)

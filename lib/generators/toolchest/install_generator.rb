@@ -36,12 +36,8 @@ module Toolchest
         end
       end
 
-      def create_oauth_views
-        return unless auth_strategy == :oauth
-
-        template "oauth_authorize.html.erb.tt",
-          "app/views/toolchest/oauth/authorizations/new.html.erb"
-      end
+      # Consent view lives in the engine and works out of the box.
+      # Run `rails g toolchest:consent` to eject and customize.
 
       def show_instructions
         say ""

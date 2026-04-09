@@ -483,6 +483,220 @@ RSpec.describe "OAuth flow", :db do
   end
 
   # ============================================================
+  # Scope Checkboxes
+  # ============================================================
+
+  describe "optional scopes (checkboxes)" do
+    let(:client) { register_client }
+    let(:client_id) { client["client_id"] }
+    let(:redirect_uri) { "http://localhost:3000/callback" }
+    let(:verifier) { SecureRandom.urlsafe_base64(32) }
+    let(:challenge) { Base64.urlsafe_encode64(Digest::SHA256.digest(verifier), padding: false) }
+
+    context "when optional_scopes is false (default)" do
+      it "grants all requested scopes regardless of submission" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: %w[orders:read orders:write],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(json_response["scope"]).to eq("orders:read orders:write")
+      end
+    end
+
+    context "when optional_scopes is true" do
+      before do
+        Toolchest.configure do |c|
+          c.auth = :oauth
+          c.mount_path = "/mcp"
+          c.scopes = {
+            "orders:read" => "View orders",
+            "orders:write" => "Modify orders"
+          }
+          c.optional_scopes = true
+          c.current_user_for_oauth { |_req| fake_user }
+        end
+      end
+
+      it "renders checkboxes on consent screen" do
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read orders:write",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.body).to include('type="checkbox"')
+        expect(last_response.body).to include("orders:read")
+        expect(last_response.body).to include("orders:write")
+      end
+
+      it "grants only submitted scopes" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: ["orders:read"],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(json_response["scope"]).to eq("orders:read")
+      end
+
+      it "strips scopes not in the allowed set (tamper protection)" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: ["orders:read", "admin:nuke"],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(json_response["scope"]).to eq("orders:read")
+      end
+    end
+
+    context "with required_scopes" do
+      before do
+        Toolchest.configure do |c|
+          c.auth = :oauth
+          c.mount_path = "/mcp"
+          c.scopes = {
+            "orders:read" => "View orders",
+            "orders:write" => "Modify orders"
+          }
+          c.optional_scopes = true
+          c.required_scopes = ["orders:read"]
+          c.current_user_for_oauth { |_req| fake_user }
+        end
+      end
+
+      it "always includes required scopes even if not submitted" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: ["orders:write"],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        scopes = json_response["scope"].split(" ")
+        expect(scopes).to include("orders:read")
+        expect(scopes).to include("orders:write")
+      end
+    end
+
+    context "with allowed_scopes_for" do
+      let(:admin_user) { Struct.new(:id, :admin?).new(1, true) }
+      let(:normal_user) { Struct.new(:id, :admin?).new(2, false) }
+
+      before do
+        Toolchest.configure do |c|
+          c.auth = :oauth
+          c.mount_path = "/mcp"
+          c.scopes = {
+            "orders:read" => "View orders",
+            "orders:write" => "Modify orders"
+          }
+          c.optional_scopes = true
+          c.allowed_scopes_for do |user, scopes|
+            user.admin? ? scopes : scopes - ["orders:write"]
+          end
+        end
+      end
+
+      it "hides gated scopes from non-admin on consent screen" do
+        Toolchest.configure { |c| c.current_user_for_oauth { |_| normal_user } }
+
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read orders:write",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        # Check scope list items, not hidden fields (original_scope preserves the full request)
+        expect(last_response.body).to include("scope_orders-read")
+        expect(last_response.body).not_to include("scope_orders-write")
+      end
+
+      it "shows all scopes to admin on consent screen" do
+        Toolchest.configure { |c| c.current_user_for_oauth { |_| admin_user } }
+
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read orders:write",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.body).to include("orders:read")
+        expect(last_response.body).to include("orders:write")
+      end
+
+      it "strips gated scopes even if submitted by non-admin" do
+        Toolchest.configure { |c| c.current_user_for_oauth { |_| normal_user } }
+
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: ["orders:read", "orders:write"],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        code = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id,
+          code_verifier: verifier
+        }
+        expect(json_response["scope"]).to eq("orders:read")
+      end
+    end
+  end
+
+  # ============================================================
   # MCP Endpoint Auth
   # ============================================================
 

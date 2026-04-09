@@ -356,6 +356,30 @@ end
 
 Turn it off: `config.filter_tools_by_scope = false`
 
+### Optional scopes (checkboxes)
+
+By default, the consent screen is all-or-nothing — approve all requested scopes or deny. Enable `optional_scopes` and users get checkboxes:
+
+```ruby
+config.optional_scopes = true
+```
+
+All scopes start checked. Users uncheck what they don't want. The token only gets the scopes the user approved. That's it — no other config needed.
+
+Layer on more control when you need it:
+
+```ruby
+# These scopes are always granted (checked + disabled on the consent screen)
+config.required_scopes = ["orders:read"]
+
+# Per-user gating — hide scopes from users who shouldn't grant them
+config.allowed_scopes_for do |user, requested_scopes|
+  user.admin? ? requested_scopes : requested_scopes - ["admin:write"]
+end
+```
+
+Scopes hidden by `allowed_scopes_for` never appear on the consent screen and can't be granted even if the POST is tampered with.
+
 ## Multi-mount
 
 Separate MCP endpoints, different auth, different toolboxes:
