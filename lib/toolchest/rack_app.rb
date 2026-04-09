@@ -26,7 +26,8 @@ module Toolchest
       end
 
       Toolchest::Current.set(auth: auth, mount_key: @mount_key.to_s) do
-        @transport.handle_request(request)
+        status, headers, body = @transport.handle_request(request)
+        [status, headers.dup, body]
       end
     end
 
@@ -59,20 +60,27 @@ module Toolchest
 
       router.mcp_server = server
 
-      server.tools_list_handler { |_params| router.tools_for_handler }
-      server.tools_call_handler { |params| router.dispatch_response(params) }
-      server.resources_list_handler { |_params| router.resources_for_handler }
-      server.resources_read_handler { |params| router.resources_read_response(params) }
-      server.resources_templates_list_handler { |_params| router.resource_templates_for_handler }
-      server.prompts_list_handler { |_params| router.prompts_for_handler }
-      server.prompts_get_handler { |params| router.prompts_get_response(params) }
-
       handlers = server.instance_variable_get(:@handlers)
-      handlers["completion/complete"] = ->(params) {
-        arg_name = (params["argument"] || params[:argument] || {})["name"]
+
+      handlers[MCP::Methods::TOOLS_LIST] = ->(params) { router.tools_for_handler }
+      handlers[MCP::Methods::RESOURCES_LIST] = ->(params) { router.resources_for_handler }
+      handlers[MCP::Methods::RESOURCES_READ] = ->(params) { router.resources_read_response(params) }
+      handlers[MCP::Methods::RESOURCES_TEMPLATES_LIST] = ->(params) { router.resource_templates_for_handler }
+      handlers[MCP::Methods::PROMPTS_LIST] = ->(params) { router.prompts_for_handler }
+      handlers[MCP::Methods::PROMPTS_GET] = ->(params) { router.prompts_get_response(params) }
+
+      # tools/call is hardcoded in handle_request to call private call_tool
+      server.define_singleton_method(:call_tool) do |params, **_kwargs|
+        router.dispatch_response(params)
+      end
+
+      # completion/complete is hardcoded to call private complete, which validates
+      # against registered prompts/resources (we don't register any). override it.
+      server.define_singleton_method(:complete) do |params|
+        arg_name = params.dig(:argument, :name) || params.dig(:argument, "name")
         values = arg_name ? router.completion_values(arg_name) : []
         { completion: { values: values, hasMore: false } }
-      }
+      end
     end
 
     def authenticate(request)

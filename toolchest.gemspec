@@ -23,7 +23,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "rails", ">= 7.0"
-  spec.add_dependency "mcp", "~> 0.8"
+  spec.add_dependency "mcp", ">= 0.10"
   # View layer: bring your own. jb (recommended), jbuilder, or blueprinter all work.
 
   spec.metadata = {
