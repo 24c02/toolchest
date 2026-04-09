@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4
+
+- **Security:** Empty-scoped tokens no longer bypass scope filtering when scopes are configured (fail closed).
+- **Security:** Authorization code exchange is now atomic — prevents race condition double-minting.
+- **Security:** Dynamic client registration rejects redirect URIs containing newlines.
+
 ## 0.3.3
 
 - Per-tool scope override: `tool "Move ticket", scope: "admin"` bypasses convention-based scope matching for individual tools. Accepts a string or array of strings (OR — any matching scope grants access). Enforced on both `tools/list` and `tools/call`.
