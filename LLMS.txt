@@ -437,6 +437,7 @@ rails g toolchest:auth token             # token migration
 rails g toolchest:auth oauth             # OAuth migration
 rails g toolchest:consent                # eject consent view
 rails g toolchest:oauth_views            # eject all OAuth views + controllers
+rails g toolchest:skills                 # install Claude Code slash commands
 ```
 
 ## Rake tasks

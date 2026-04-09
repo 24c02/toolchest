@@ -498,6 +498,7 @@ rails g toolchest Admin::Orders show  # namespaced
 rails g toolchest:auth oauth          # add auth migration + views
 rails g toolchest:consent             # eject consent view
 rails g toolchest:oauth_views         # eject all OAuth views + controllers
+rails g toolchest:skills              # install Claude Code slash commands
 ```
 
 ## Introspection
@@ -544,6 +545,16 @@ OAuth provider is cribbed from [Doorkeeper](https://github.com/doorkeeper-gem/do
 ## For agents
 
 If you're implementing this with an agent (or you're the agent reading this), consider the contents of [LLMS.txt](LLMS.txt).
+
+## Claude Code skills
+
+Install skills for Claude Code that know how to work with toolchest:
+
+```bash
+rails g toolchest:skills
+```
+
+This gives you `/add-toolbox`, `/add-tool`, and `/toolchest-auth` slash commands.
 
 ## Requirements
 
