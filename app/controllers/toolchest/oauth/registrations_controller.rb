@@ -9,7 +9,14 @@ module Toolchest
       # at authorization time via the resource param.
       def create
         name = (params[:client_name] || "MCP Client").truncate(255)
-        uris = Array(params[:redirect_uris])
+        uris = Array(params[:redirect_uris]).map(&:to_s)
+
+        if uris.any? { |u| u.match?(/[\r\n]/) }
+          return render json: {
+            error: "invalid_client_metadata",
+            error_description: "Redirect URIs must not contain newlines"
+          }, status: :bad_request
+        end
 
         if uris.size > 10
           return render json: {

@@ -46,7 +46,9 @@ module Toolchest
           return error_response("invalid_grant", "PKCE verification failed")
         end
 
-        grant.revoke!
+        unless grant.revoke_atomically!
+          return error_response("invalid_grant", "Authorization code already used")
+        end
 
         token = Toolchest::OauthAccessToken.create_for(
           application: app,

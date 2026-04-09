@@ -217,7 +217,12 @@ module Toolchest
     READ_ACTIONS = Set.new(%i[show index list search]).freeze
 
     def tool_allowed_by_scopes?(tool_definition, scopes)
-      return true if scopes.empty?
+      if scopes.empty?
+        # Token has no scopes. Allow only if the server hasn't declared any
+        # scopes either (convention-based filtering without declarations).
+        # When scopes ARE configured, empty token scopes = no access (fail closed).
+        return Toolchest.configuration(@mount_key).scopes.empty?
+      end
 
       if tool_definition.scope
         return tool_definition.scope.any? { |s| scopes.include?(s) }

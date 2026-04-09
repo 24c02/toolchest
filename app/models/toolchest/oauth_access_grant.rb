@@ -24,6 +24,13 @@ module Toolchest
 
     def revoke! = update!(revoked_at: Time.current)
 
+    # Atomic revocation — returns true only if THIS call revoked the grant.
+    # Prevents race conditions where two concurrent token exchanges both
+    # find the grant active and both mint tokens (RFC 6749 §4.1.2).
+    def revoke_atomically!
+      self.class.where(id: id, revoked_at: nil).update_all(revoked_at: Time.current) > 0
+    end
+
     def uses_pkce? = code_challenge.present?
 
     def verify_pkce(code_verifier)

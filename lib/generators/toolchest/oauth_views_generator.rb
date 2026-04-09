@@ -4,23 +4,25 @@ require "rails/generators/base"
 module Toolchest
   module Generators
     class OauthViewsGenerator < Rails::Generators::Base
+      source_root File.expand_path("../../../..", __dir__)
+
       desc "Eject all OAuth views and controllers for customization"
 
       def copy_views
-        engine_views = File.expand_path("../../../../app/views/toolchest/oauth", __dir__)
+        views_dir = File.join(self.class.source_root, "app/views/toolchest/oauth")
 
-        Dir[File.join(engine_views, "**", "*.erb")].each do |src|
-          relative = src.sub(engine_views + "/", "")
-          copy_file src, "app/views/toolchest/oauth/#{relative}"
+        Dir[File.join(views_dir, "**", "*.erb")].each do |src|
+          relative = src.sub(views_dir + "/", "")
+          copy_file "app/views/toolchest/oauth/#{relative}"
         end
       end
 
       def copy_controllers
-        engine_controllers = File.expand_path("../../../../app/controllers/toolchest/oauth", __dir__)
+        controllers_dir = File.join(self.class.source_root, "app/controllers/toolchest/oauth")
 
-        Dir[File.join(engine_controllers, "**", "*.rb")].each do |src|
-          relative = src.sub(engine_controllers + "/", "")
-          copy_file src, "app/controllers/toolchest/oauth/#{relative}"
+        Dir[File.join(controllers_dir, "**", "*.rb")].each do |src|
+          relative = src.sub(controllers_dir + "/", "")
+          copy_file "app/controllers/toolchest/oauth/#{relative}"
         end
       end
 

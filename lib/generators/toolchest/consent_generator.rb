@@ -4,11 +4,12 @@ require "rails/generators/base"
 module Toolchest
   module Generators
     class ConsentGenerator < Rails::Generators::Base
+      source_root File.expand_path("../../../..", __dir__)
+
       desc "Eject the OAuth consent view for customization"
 
       def copy_consent_view
-        engine_view = File.expand_path("../../../../app/views/toolchest/oauth/authorizations/new.html.erb", __dir__)
-        copy_file engine_view, "app/views/toolchest/oauth/authorizations/new.html.erb"
+        copy_file "app/views/toolchest/oauth/authorizations/new.html.erb"
       end
 
       def show_instructions
