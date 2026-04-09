@@ -421,6 +421,32 @@ end
 
 Turn it off: `config.filter_tools_by_scope = false`
 
+### Per-tool scope override
+
+The convention derives scopes from the toolbox name — `OrdersToolbox` tools require `orders:*`. When a tool doesn't fit its toolbox's scope boundary, override it:
+
+```ruby
+class TicketsToolbox < ApplicationToolbox
+  tool "List tickets" do
+  end
+  def list = # ... requires tickets:read (convention)
+
+  # Only tokens with the "admin" scope can see or call this tool
+  tool "Move ticket", scope: "admin" do
+    param :status, :string, "New status"
+  end
+  def move = # ...
+
+  # Either "admin" OR "superuser" grants access
+  tool "Escalate ticket", scope: ["admin", "superuser"] do
+    param :id, :string, "Ticket ID"
+  end
+  def escalate = # ...
+end
+```
+
+`scope:` replaces the convention entirely for that tool — `tickets:write` won't grant access to a tool with `scope: "admin"`. The token must include the literal scope string. Enforced on both `tools/list` (visibility) and `tools/call` (execution).
+
 ### Optional scopes (checkboxes)
 
 By default, the consent screen is all-or-nothing — approve all requested scopes or deny. Enable `optional_scopes` and users get checkboxes:

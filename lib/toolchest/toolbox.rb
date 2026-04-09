@@ -46,10 +46,10 @@ module Toolchest
           .flat_map { |a| a.send(:own_prompts) }
       end
 
-      def tool(description, name: nil, access: nil, annotations: nil, &block)
+      def tool(description, name: nil, access: nil, scope: nil, annotations: nil, &block)
         builder = ToolBuilder.new
         builder.instance_eval(&block) if block
-        @_pending_tool = { description: description, custom_name: name, access_level: access, annotations: annotations, builder: builder }
+        @_pending_tool = { description:, custom_name: name, access_level: access, scope:, annotations:, builder: }
       end
 
       def default_param(name, type, description = "", **options)
@@ -110,6 +110,7 @@ module Toolchest
           toolbox_class: self,
           custom_name: pending[:custom_name],
           access_level: pending[:access_level],
+          scope: pending[:scope],
           annotations: pending[:annotations]
         )
 

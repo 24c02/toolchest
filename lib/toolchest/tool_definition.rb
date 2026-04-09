@@ -1,14 +1,15 @@
 module Toolchest
   class ToolDefinition
-    attr_reader :method_name, :description, :params, :toolbox_class, :custom_name, :access_level, :annotations
+    attr_reader :method_name, :description, :params, :toolbox_class, :custom_name, :access_level, :scope, :annotations
 
-    def initialize(method_name:, description:, params:, toolbox_class:, custom_name: nil, access_level: nil, annotations: nil)
+    def initialize(method_name:, description:, params:, toolbox_class:, custom_name: nil, access_level: nil, scope: nil, annotations: nil)
       @method_name = method_name.to_sym
       @description = description
       @params = params
       @toolbox_class = toolbox_class
       @custom_name = custom_name
       @access_level = access_level
+      @scope = scope ? Array(scope) : nil
       @annotations = annotations
     end
 

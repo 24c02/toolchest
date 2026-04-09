@@ -213,7 +213,12 @@ end
 
 Types: `:string`, `:integer`, `:number`, `:boolean`, `:object`, `[:object]`, `[:string]`, etc.
 
-Options on `tool`: `name: "custom_tool_name"`, `access: :read` or `access: :write` (for scope filtering + annotations), `annotations: { openWorldHint: true }` (override hints).
+Options on `tool`:
+
+- `name: "custom_tool_name"` — override generated tool name
+- `access: :read` or `access: :write` — scope filtering + MCP annotations
+- `scope: "admin"` or `scope: ["admin", "superuser"]` — per-tool scope override (see below)
+- `annotations: { openWorldHint: true }` — override MCP hints
 
 `access: :read` → `readOnlyHint: true, destructiveHint: false`. `access: :write` → `readOnlyHint: false, destructiveHint: true`.
 
@@ -344,6 +349,22 @@ Pattern: `{toolbox}:{access}`. Actions named `show`, `index`, `list`, `search` d
 Scopes filter `tools/list` — clients only see tools their token allows. Fails closed: if scopes can't be determined, no tools are shown.
 
 Disable: `config.filter_tools_by_scope = false`
+
+### Per-tool scope override
+
+When a tool doesn't fit its toolbox's scope boundary, set `scope:` to bypass the convention:
+
+```ruby
+tool "Move ticket", scope: "admin" do       # only "admin" scope grants access
+  param :status, :string, "New status"
+end
+
+tool "Escalate", scope: ["admin", "superuser"] do  # either scope works (OR)
+  param :id, :string, "ID"
+end
+```
+
+`scope:` replaces convention matching for that tool. `tickets:write` won't grant access to a tool with `scope: "admin"`. Enforced on both `tools/list` and `tools/call`.
 
 ### Optional scopes (checkboxes on consent)
 

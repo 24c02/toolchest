@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3
+
+- Per-tool scope override: `tool "Move ticket", scope: "admin"` bypasses convention-based scope matching for individual tools. Accepts a string or array of strings (OR — any matching scope grants access). Enforced on both `tools/list` and `tools/call`.
+
 ## 0.3.0
 
 - Sampling: `mcp_sample("prompt")` asks the client's LLM to do work from inside a tool action. Block form for full control. Raises `Toolchest::Error` if the client doesn't support it (rescue with `rescue_from`).

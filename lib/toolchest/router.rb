@@ -219,6 +219,10 @@ module Toolchest
     def tool_allowed_by_scopes?(tool_definition, scopes)
       return true if scopes.empty?
 
+      if tool_definition.scope
+        return tool_definition.scope.any? { |s| scopes.include?(s) }
+      end
+
       prefix = tool_definition.toolbox_class.controller_name.split("/").last
       tool_access = tool_definition.access_level ||
         (READ_ACTIONS.include?(tool_definition.method_name) ? :read : :write)

@@ -35,6 +35,26 @@ RSpec.describe "Scope filtering" do
     end
   end
 
+  let(:tickets_toolbox) do
+    Class.new(Toolchest::Toolbox) do
+      def self.name = "TicketsToolbox"
+
+      tool "List tickets" do
+      end
+      def list = render_error "stub"
+
+      tool "Move ticket", scope: "admin" do
+        param :status, :string, "New status"
+      end
+      def move = render_error "stub"
+
+      tool "Escalate ticket", scope: ["admin", "superuser"] do
+        param :id, :string, "ID"
+      end
+      def escalate = render_error "stub"
+    end
+  end
+
   let(:router) { Toolchest.router }
 
   before do
@@ -98,6 +118,57 @@ RSpec.describe "Scope filtering" do
     auth = Struct.new(:scopes).new("orders:read")
     Toolchest::Current.set(auth: auth) do
       expect(router.tools_for_handler.length).to eq(5)
+    end
+  end
+
+  # --- per-tool scope override ---
+
+  describe "tool-level scope:" do
+    before { router.register(tickets_toolbox) }
+
+    it "hides scoped tool when token lacks the required scope" do
+      auth = Struct.new(:scopes).new("tickets:write")
+      Toolchest::Current.set(auth: auth) do
+        names = router.tools_for_handler.map { |t| t[:name] }
+        expect(names).to include("tickets_list")
+        expect(names).not_to include("tickets_move")
+      end
+    end
+
+    it "shows scoped tool when token has the exact scope" do
+      auth = Struct.new(:scopes).new("tickets:write admin")
+      Toolchest::Current.set(auth: auth) do
+        names = router.tools_for_handler.map { |t| t[:name] }
+        expect(names).to include("tickets_list", "tickets_move")
+      end
+    end
+
+    it "convention-based scopes don't grant access to scoped tools" do
+      auth = Struct.new(:scopes).new("tickets")
+      Toolchest::Current.set(auth: auth) do
+        names = router.tools_for_handler.map { |t| t[:name] }
+        expect(names).to include("tickets_list")
+        expect(names).not_to include("tickets_move")
+      end
+    end
+
+    it "accepts any scope from an array (OR)" do
+      auth = Struct.new(:scopes).new("superuser")
+      Toolchest::Current.set(auth: auth) do
+        names = router.tools_for_handler.map { |t| t[:name] }
+        expect(names).to include("tickets_escalate")
+        expect(names).not_to include("tickets_move")
+      end
+    end
+
+    it "enforces scope on dispatch too" do
+      Toolchest.configuration.auth = :token
+      auth = Struct.new(:scopes).new("tickets:write")
+      Toolchest::Current.set(auth: auth) do
+        result = router.dispatch("tickets_move", { "status" => "closed" })
+        expect(result[:isError]).to be true
+        expect(result[:content].first[:text]).to include("Forbidden")
+      end
     end
   end
 
