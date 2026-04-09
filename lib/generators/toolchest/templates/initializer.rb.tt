@@ -5,7 +5,7 @@ Toolchest.configure do |config|
   config.mount_path = "/mcp"
 <% if auth_strategy == :token -%>
 
-  # Return anything from this block — it becomes `auth` in your toolboxes.
+  # Resolve the token to a user (or anything). Available as auth.resource_owner in toolboxes.
   config.authenticate do |token|
     # User.find(token.owner_id)
   end
@@ -22,7 +22,7 @@ Toolchest.configure do |config|
     #   User.find_by(id: request.session[:user_id])
   end
 
-  # After token exchange, resolve the token to whatever `auth` should be in toolboxes.
+  # Resolve the token to a user (or anything). Available as auth.resource_owner in toolboxes.
   config.authenticate do |token|
     # User.find(token.resource_owner_id)
   end

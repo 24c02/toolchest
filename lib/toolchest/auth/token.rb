@@ -10,12 +10,24 @@ module Toolchest
         token_record = find_token(token_string)
         return nil unless token_record
 
-        config = Toolchest.configuration
-        if config.respond_to?(:authenticate_with) && config.send(:instance_variable_get, :@authenticate_block)
-          config.authenticate_with(token_record)
+        scopes = if token_record.respond_to?(:scopes_array)
+          token_record.scopes_array
+        elsif token_record.respond_to?(:scopes)
+          Array(token_record.scopes).flat_map { |s| s.split(" ") }.reject(&:empty?)
         else
-          token_record
+          []
         end
+
+        config = Toolchest.configuration
+        owner = if config.respond_to?(:authenticate_with) && config.send(:instance_variable_get, :@authenticate_block)
+          config.authenticate_with(token_record)
+        end
+
+        AuthContext.new(
+          resource_owner: owner,
+          scopes: scopes,
+          token: token_record
+        )
       end
 
       private

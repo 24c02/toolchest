@@ -23,19 +23,26 @@ module Toolchest
     def tools_for_handler
       config = Toolchest.configuration(@mount_key)
 
-      if config.filter_tools_by_scope
-        auth = Toolchest::Current.auth
-        scopes = extract_scopes(auth)
-
-        if scopes
-          tool_definitions.select { |td| tool_allowed_by_scopes?(td, scopes) }
-                          .map { |td| td.to_mcp_schema }
-        else
-          tools_list
-        end
-      else
-        tools_list
+      unless config.filter_tools_by_scope
+        return tools_list
       end
+
+      auth = Toolchest::Current.auth
+
+      # No auth: show all tools for :none, show nothing otherwise
+      unless auth
+        return config.auth == :none ? tools_list : []
+      end
+
+      scopes = extract_scopes(auth)
+
+      # Auth present but no scopes extractable: fail closed
+      unless scopes
+        return []
+      end
+
+      tool_definitions.select { |td| tool_allowed_by_scopes?(td, scopes) }
+                      .map { |td| td.to_mcp_schema }
     end
 
     def dispatch(tool_name, arguments = {})

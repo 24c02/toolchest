@@ -4,6 +4,7 @@ require "toolchest/version"
 
 module Toolchest
   autoload :App, "toolchest/app"
+  autoload :AuthContext, "toolchest/auth_context"
   autoload :Configuration, "toolchest/configuration"
   autoload :Current, "toolchest/current"
   autoload :Naming, "toolchest/naming"

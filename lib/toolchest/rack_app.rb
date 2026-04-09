@@ -27,7 +27,20 @@ module Toolchest
 
       Toolchest::Current.set(auth: auth, mount_key: @mount_key.to_s) do
         status, headers, body = @transport.handle_request(request)
-        [status, headers.dup, body]
+        # The transport may return a streaming body (proc) that executes after
+        # Current.set unwinds. Wrap it to restore Current for the duration.
+        wrapped_body = if body.respond_to?(:call)
+          captured_auth = auth
+          captured_mount = @mount_key.to_s
+          proc { |stream|
+            Toolchest::Current.set(auth: captured_auth, mount_key: captured_mount) do
+              body.call(stream)
+            end
+          }
+        else
+          body
+        end
+        [status, headers.dup, wrapped_body]
       end
     end
 

@@ -13,11 +13,15 @@ module Toolchest
         return nil unless token
 
         config = Toolchest.configuration(@mount_key.to_sym)
-        if config.send(:instance_variable_get, :@authenticate_block)
+        owner = if config.send(:instance_variable_get, :@authenticate_block)
           config.authenticate_with(token)
-        else
-          token
         end
+
+        AuthContext.new(
+          resource_owner: owner,
+          scopes: token.scopes_array,
+          token: token
+        )
       end
     end
   end

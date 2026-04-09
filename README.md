@@ -31,21 +31,15 @@ rails s
 ```ruby
 # app/toolboxes/application_toolbox.rb
 class ApplicationToolbox < Toolchest::Toolbox
-  alias_method :current_user, :auth
+  def current_user = auth&.resource_owner
 
   rescue_from ActiveRecord::RecordNotFound do |e|
     render_error "Couldn't find that #{e.model.downcase}"
   end
-
-  # include Pundit::Authorization
-
-  # rescue_from Pundit::NotAuthorizedError do
-  #   render_error "You don't have access to that"
-  # end
 end
 ```
 
-This is your ApplicationController. `auth` is whatever your `authenticate` block returns. Alias it, add shared error handling, include your gems. The stuff you'd put in ApplicationController goes here instead.
+This is your ApplicationController. `auth` returns a `Toolchest::AuthContext` with `.resource_owner` (whatever your `authenticate` block returns), `.scopes` (always from the token), and `.token` (the raw record). Define `current_user` as a convenience, add shared error handling, include your gems.
 
 ```ruby
 # app/toolboxes/orders_toolbox.rb
@@ -236,7 +230,7 @@ Toolchest.configure do |config|
 end
 ```
 
-`authenticate` gets the token record and returns whatever you want `auth` to be in your toolboxes. There's no assumed User model.
+`authenticate` resolves the token to a user (or anything). The return value becomes `auth.resource_owner` in your toolboxes. Scopes are preserved from the token automatically — you can't lose them here.
 
 ### :oauth
 
@@ -266,6 +260,8 @@ Toolchest.configure do |config|
   end
 end
 ```
+
+`authenticate` resolves the token to `auth.resource_owner`. Scopes come from the token and are never lost, even if you return a plain User.
 
 You also need `toolchest_oauth` in your routes for `.well-known` discovery:
 
@@ -310,12 +306,14 @@ end
 ```ruby
 class WardenAuth
   def authenticate(request)
-    request.env["warden"]&.user
+    user = request.env["warden"]&.user
+    return nil unless user
+    Toolchest::AuthContext.new(resource_owner: user, scopes: [], token: nil)
   end
 end
 ```
 
-Whatever `authenticate` returns becomes `auth` in your toolboxes (same as the built-in strategies). Return `nil` to indicate no authentication.
+Custom strategies return an `AuthContext` (or nil for unauthenticated). If you return something else, `auth` will be that object directly — but scope filtering only works with `AuthContext`.
 
 You can inherit from `Toolchest::Auth::Base` to get `extract_bearer_token` for free:
 

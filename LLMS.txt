@@ -2,78 +2,46 @@
 
 MCP (Model Context Protocol) for Rails. Toolboxes are controllers, tools are actions.
 
-## Setup
+## Adding a toolbox (the thing you'll do most)
 
 ```bash
-bundle add toolchest jb
-rails g toolchest:install --auth=none
+rails g toolchest:toolbox Orders show create update
 ```
 
-```ruby
-# config/routes.rb
-mount Toolchest::Engine => "/mcp"
-```
+This creates three files:
 
-For OAuth, use `Toolchest.app` instead and add `toolchest_oauth` for `.well-known` discovery:
+- `app/toolboxes/orders_toolbox.rb` — the toolbox (like a controller)
+- `app/views/toolboxes/orders/{show,create,update}.json.jb` — views for each tool
+- `spec/toolboxes/orders_toolbox_spec.rb` — test file
 
-```ruby
-mount Toolchest.app => "/mcp"
-toolchest_oauth
-```
-
-## Core concepts
-
-- Toolbox = controller. Lives in `app/toolboxes/`. Inherits `ApplicationToolbox < Toolchest::Toolbox`.
-- Tool = action. A method annotated with the `tool` macro.
-- Views live in `app/views/toolboxes/{toolbox_name}/`. Use jb (`.json.jb`) or jbuilder.
-- `auth` in toolboxes is whatever the `authenticate` block returns (or the raw token record if no block).
-- `params` is `Toolchest::Parameters` (like AC::Parameters — `[]`, `fetch`, `require`, `permit`, `slice`, `except`). Filtered to declared keys only.
-
-## Writing a toolbox
+Fill in the toolbox:
 
 ```ruby
 class OrdersToolbox < ApplicationToolbox
-  default_param :order_id, :string, "The order ID", except: [:create, :search]
+  before_action :set_order, only: [:show, :update]
 
-  before_action :set_order, except: [:create, :search]
-
-  rescue_from ActiveRecord::RecordNotFound do |e|
-    render_error "Couldn't find that #{e.model.downcase}"
-  end
-
-  tool "Look up an order by ID" do
+  tool "Look up an order" do
+    param :order_id, :string, "The order ID"
   end
   def show
-    # No explicit render -> implicit render of app/views/toolboxes/orders/show.json.jb
+    # renders app/views/toolboxes/orders/show.json.jb automatically
   end
 
   tool "Update order status" do
+    param :order_id, :string, "The order ID"
     param :status, :string, "New status", enum: %w[pending confirmed shipped]
-    param :tracking, :string, "Tracking number", optional: true
   end
   def update
-    if @order.update(params.permit(:status, :tracking).to_h)
-      render :show
-    else
-      render_errors @order
-    end
+    @order.update(params.permit(:status).to_h)
+    render :show
   end
 
   tool "Create a new order" do
     param :customer_id, :string, "Customer"
-    param :items, [:object], "Line items" do
-      param :product_id, :string, "Product SKU"
-      param :quantity, :integer, "How many", default: 1
-    end
   end
   def create
-    @order = Order.new(params.permit(:customer_id).to_h)
-    if @order.save
-      render :show
-      suggests :show, "Get the full order details"
-    else
-      render_errors @order
-    end
+    @order = Order.create!(params.permit(:customer_id).to_h)
+    render :show
   end
 
   private
@@ -84,7 +52,121 @@ class OrdersToolbox < ApplicationToolbox
 end
 ```
 
-## Tool DSL
+Fill in the view:
+
+```ruby
+# app/views/toolboxes/orders/show.json.jb
+{
+  id: @order.id,
+  status: @order.status,
+  customer: @order.customer.name
+}
+```
+
+Test it:
+
+```ruby
+require "toolchest/rspec"
+
+RSpec.describe OrdersToolbox, type: :toolbox do
+  it "shows an order" do
+    order = create(:order)
+    call_tool "orders_show", params: { order_id: order.id.to_s }, as: user
+    expect(tool_response).to be_success
+    expect(tool_response.text).to include(order.customer.name)
+  end
+end
+```
+
+That's it. The tool is live at your MCP endpoint.
+
+## Common patterns
+
+### Toolbox wrapping an AR model
+
+Use `default_param` to avoid repeating the ID param on every tool, and `before_action` to load the record:
+
+```ruby
+class OrdersToolbox < ApplicationToolbox
+  default_param :order_id, :string, "The order ID", except: [:create, :search]
+  before_action :set_order, except: [:create, :search]
+
+  rescue_from ActiveRecord::RecordNotFound do |e|
+    render_error "Couldn't find that #{e.model.downcase}"
+  end
+
+  tool "Look up an order" do
+  end
+  def show; end  # implicit render
+
+  tool "Update status" do
+    param :status, :string, "New status", enum: %w[pending confirmed shipped]
+  end
+  def update
+    if @order.update(params.permit(:status).to_h)
+      render :show
+    else
+      render_errors @order
+    end
+  end
+
+  private
+  def set_order = @order = Order.find(params[:order_id])
+end
+```
+
+### Auth checks in before_action
+
+```ruby
+class AdminToolbox < ApplicationToolbox
+  before_action :require_admin!
+
+  private
+  def require_admin!
+    halt error: "forbidden" unless current_user&.admin?
+  end
+end
+```
+
+### Nested object params
+
+```ruby
+tool "Create order with items" do
+  param :customer_id, :string, "Customer"
+  param :items, [:object], "Line items" do
+    param :product_id, :string, "Product SKU"
+    param :quantity, :integer, "How many", default: 1
+  end
+end
+```
+
+### Suggesting the next tool
+
+```ruby
+def create
+  @order = Order.create!(...)
+  render :show
+  suggests :show, "Get the full order details"
+end
+```
+
+## Setup
+
+```bash
+bundle add toolchest jb
+rails g toolchest:install --auth=none   # or --auth=token, --auth=oauth
+```
+
+```ruby
+# config/routes.rb — for :none or :token
+mount Toolchest::Engine => "/mcp"
+
+# for :oauth — use Toolchest.app and add discovery routes
+mount Toolchest.app => "/mcp"
+toolchest_oauth
+```
+
+## Tool DSL reference
 
 ```ruby
 tool "Description for the LLM" do
@@ -95,24 +177,23 @@ tool "Description for the LLM" do
   param :items, [:object], "array of objects" do
     param :nested_field, :string, "nested"
   end
-  param :address, :object, "single object" do
-    param :street, :string, "street"
-    param :city, :string, "city", optional: true
-  end
 end
 def method_name
   # implementation
 end
 ```
 
-Types: `:string`, `:integer`, `:number`, `:boolean`, `:object`, `[:object]` (array of objects), `[:string]` (array of strings), etc.
+Types: `:string`, `:integer`, `:number`, `:boolean`, `:object`, `[:object]`, `[:string]`, etc.
 
 Options on `tool`: `name: "custom_tool_name"`, `access: :read` or `access: :write` (for scope filtering).
 
-## Instance methods (available in toolbox actions)
+## Instance methods in toolbox actions
 
 ```ruby
-auth                              # the authenticated user/token (set by authenticate block)
+auth                              # Toolchest::AuthContext (nil for :none auth)
+auth.resource_owner               # whatever your authenticate block returns
+auth.scopes                       # token scopes (always preserved)
+auth.token                        # the raw token record
 params                            # Toolchest::Parameters (declared keys only)
 render :action                    # renders app/views/toolboxes/{toolbox}/{action}.json.jb
 render "path/to/template"         # explicit template path
@@ -128,22 +209,120 @@ halt error: "forbidden"           # stop execution, render error
 halt                              # stop execution (must have rendered already)
 ```
 
-## View files (jb)
+## Auth
+
+Three built-in strategies. Default is `:none`.
+
+### :none
+
+No auth. `auth` is nil. All tools visible.
+
+### :token
 
 ```ruby
-# app/views/toolboxes/orders/show.json.jb
-{
-  id: @order.id,
-  status: @order.status,
-  items: @order.items.map { |i| { name: i.name, qty: i.quantity } }
+Toolchest.configure do |config|
+  config.auth = :token
+  config.authenticate do |token|
+    # token is EnvTokenRecord (owner_id, scopes) or Toolchest::Token AR record
+    # return value becomes auth.resource_owner in toolboxes
+    User.find(token.owner_id)
+  end
+end
+```
+
+Dev setup (env vars, no DB):
+
+```bash
+TOOLCHEST_TOKEN=tcht_dev_secret
+TOOLCHEST_TOKEN_OWNER=user:1
+TOOLCHEST_TOKEN_SCOPES="orders:read orders:write"
+```
+
+Production (DB tokens):
+
+```bash
+rails g toolchest:auth token && rails db:migrate
+rails toolchest:token:generate OWNER=user:1 NAME="claude desktop"
+```
+
+### :oauth
+
+Full OAuth 2.1 with PKCE and DCR. Isolated from host app auth.
+
+```ruby
+Toolchest.configure do |config|
+  config.auth = :oauth
+  config.login_path = "/login"
+
+  config.current_user_for_oauth do |request|
+    request.env["warden"]&.user  # for consent screen
+  end
+
+  config.authenticate do |token|
+    # token is Toolchest::OauthAccessToken (resource_owner_id, scopes, mount_key)
+    # scopes are always preserved — returning a User here is fine
+    User.find(token.resource_owner_id)
+  end
+end
+```
+
+### Custom auth
+
+```ruby
+config.auth = MyAuth.new
+
+class MyAuth < Toolchest::Auth::Base
+  def authenticate(request)
+    key = request.env["HTTP_X_API_KEY"]
+    user = ApiKey.active.find_by(key: key)&.owner
+    return nil unless user
+    Toolchest::AuthContext.new(resource_owner: user, scopes: [], token: nil)
+  end
+end
+```
+
+### AuthContext
+
+`auth` always returns a `Toolchest::AuthContext` (or nil for `:none`):
+
+```ruby
+auth.resource_owner  # whatever your authenticate block returns (User, etc.)
+auth.scopes          # array of scope strings from the token — never lost
+auth.token           # the raw token record
+```
+
+The generator creates `def current_user = auth&.resource_owner` in ApplicationToolbox.
+
+Scopes are always extracted from the token *before* the authenticate block runs. You cannot accidentally lose scopes by returning a User from authenticate.
+
+## Scopes
+
+```ruby
+config.scopes = {
+  "orders:read"  => "View order details",
+  "orders:write" => "Create and modify orders"
 }
 ```
 
-Instance variables set in the action are available in views.
+Pattern: `{toolbox}:{access}`. Actions named `show`, `index`, `list`, `search` default to `:read`, everything else to `:write`. Override per-tool: `tool "desc", access: :read`.
+
+`write` scope grants both read and write. Bare scope (e.g. `orders`) grants full access.
+
+Scopes filter `tools/list` — clients only see tools their token allows. Fails closed: if scopes can't be determined, no tools are shown.
+
+Disable: `config.filter_tools_by_scope = false`
+
+### Optional scopes (checkboxes on consent)
+
+```ruby
+config.optional_scopes = true                    # users can uncheck scopes (default: false)
+config.required_scopes = ["orders:read"]         # always granted, can't uncheck (default: [])
+config.allowed_scopes_for do |user, requested|   # per-user gating (default: show all)
+  user.admin? ? requested : requested - ["admin:write"]
+end
+```
 
 ## Resources and prompts
-
-Class-level macros on the toolbox:
 
 ```ruby
 class OrdersToolbox < ApplicationToolbox
@@ -163,158 +342,17 @@ class OrdersToolbox < ApplicationToolbox
 end
 ```
 
-## Auth
-
-Three built-in strategies, or bring your own. Default is `:none`.
-
-### :none
-
-No authentication. `auth` is nil.
-
-### :token
-
-Bearer tokens. In dev, set env vars:
-
-```bash
-TOOLCHEST_TOKEN=tcht_dev_secret
-TOOLCHEST_TOKEN_OWNER=user:1
-TOOLCHEST_TOKEN_SCOPES="orders:read orders:write"  # optional
-```
-
-For production, use DB tokens:
-
-```bash
-rails g toolchest:auth token && rails db:migrate
-rails toolchest:token:generate OWNER=user:1 NAME="claude desktop"
-rails toolchest:token:list
-rails toolchest:token:revoke TOKEN=tcht_...
-```
-
-```ruby
-Toolchest.configure do |config|
-  config.auth = :token
-  config.authenticate do |token|
-    # token is EnvTokenRecord (owner_id, scopes) or Toolchest::Token AR record
-    User.find(token.owner_id)
-  end
-end
-```
-
-Without an `authenticate` block, `auth` returns the raw token record.
-
-### :oauth
-
-Full OAuth 2.1 with PKCE and Dynamic Client Registration. Isolated from host app's auth.
-
-```bash
-rails g toolchest:install --auth=oauth && rails db:migrate
-```
-
-```ruby
-Toolchest.configure do |config|
-  config.auth = :oauth
-  config.login_path = "/login"  # redirect here when unauthenticated
-
-  config.current_user_for_oauth do |request|
-    # return logged-in user for consent screen, or nil to redirect to login_path
-    request.env["warden"]&.user  # devise example
-  end
-
-  config.authenticate do |token|
-    # token is Toolchest::OauthAccessToken (resource_owner_id, scopes, mount_key)
-    User.find(token.resource_owner_id)
-  end
-end
-```
-
-```ruby
-# config/routes.rb
-mount Toolchest.app => "/mcp"
-toolchest_oauth
-```
-
-Without an `authenticate` block, `auth` returns the raw OauthAccessToken record.
-
-OAuth tables: `toolchest_oauth_applications`, `toolchest_oauth_access_grants`, `toolchest_oauth_access_tokens`. All prefixed, won't collide with Doorkeeper.
-
-Token management:
-
-```ruby
-Toolchest::OauthAccessToken.revoke_all_for(app, user.id)
-Toolchest::OauthAccessGrant.revoke_all_for(app, user.id)
-```
-
-Built-in revocation UI at `/{mount}/oauth/authorized_applications`.
-
-### Custom auth
-
-Pass any object responding to `#authenticate(request)`:
-
-```ruby
-config.auth = MyCustomAuth.new
-
-class MyCustomAuth < Toolchest::Auth::Base  # optional, gives extract_bearer_token
-  def authenticate(request)
-    key = request.env["HTTP_X_API_KEY"]
-    ApiKey.active.find_by(key: key)&.owner
-  end
-end
-```
-
-Whatever `authenticate` returns becomes `auth`. Return nil = unauthenticated.
-
-## Scopes
-
-```ruby
-config.scopes = {
-  "orders:read"  => "View order details",
-  "orders:write" => "Create and modify orders"
-}
-```
-
-Pattern: `{toolbox}:{access}`. Actions named `show`, `index`, `list`, `search` default to `:read`, everything else to `:write`. Override per-tool with `access: :read` / `access: :write`. A `write` scope grants both read and write. A scope with no suffix (e.g. `orders`) grants full access.
-
-Scopes filter `tools/list` — clients only see tools their token allows.
-
-Disable: `config.filter_tools_by_scope = false`
-
-### Optional scopes (checkboxes on consent)
-
-```ruby
-config.optional_scopes = true                    # users can uncheck scopes (default: false, all-or-nothing)
-config.required_scopes = ["orders:read"]         # always granted, can't uncheck (default: [])
-config.allowed_scopes_for do |user, requested|   # per-user gating, hides scopes silently (default: show all)
-  user.admin? ? requested : requested - ["admin:write"]
-end
-```
-
-
 ## Multi-mount
 
-Separate endpoints with different auth, toolboxes, and scopes:
-
 ```ruby
-Toolchest.configure do |config|
-  config.auth = :oauth
-  config.toolbox_module = "Public"
-end
+Toolchest.configure { |c| c.auth = :oauth; c.toolbox_module = "Public" }
+Toolchest.configure(:admin) { |c| c.auth = :token; c.toolbox_module = "Admin" }
 
-Toolchest.configure(:admin) do |config|
-  config.auth = :token
-  config.toolbox_module = "Admin"
-end
-```
-
-```ruby
-# config/routes.rb
+# routes.rb
 mount Toolchest.app => "/mcp"
 mount Toolchest.app(:admin) => "/admin-mcp"
-toolchest_oauth
+toolchest_oauth default_mount: :default
 ```
-
-`config.toolboxes = [OrdersToolbox, ...]` for explicit assignment. `config.toolbox_module = "Admin"` for convention-based (matches `Admin::*Toolbox`). Without either, all toolboxes go to all mounts.
-
-For multiple OAuth mounts, set `toolchest_oauth default_mount: :default` so bare `.well-known` requests resolve correctly.
 
 ## Tool naming
 
@@ -325,25 +363,11 @@ config.tool_naming = :slashed      # orders/show
 config.tool_naming = ->(prefix, method) { "#{prefix}__#{method}" }
 ```
 
-Namespaced toolboxes (`Admin::OrdersToolbox`) produce `admin_orders_{action}` regardless of mount.
-
 Per-tool: `tool "desc", name: "custom_name"`
 
-## Server config
+Namespaced toolboxes (`Admin::OrdersToolbox`) produce `admin_orders_{action}`.
 
-```ruby
-Toolchest.configure do |config|
-  config.server_name = "My App"
-  config.server_description = "Order management tools"
-  config.server_instructions = "Always look up the customer before modifying orders."
-end
-```
-
-## Completion
-
-Params with `enum:` automatically power `completion/complete`. No extra code needed.
-
-## Testing (RSpec)
+## Testing
 
 ```ruby
 require "toolchest/rspec"
@@ -374,9 +398,8 @@ Matchers: `be_success`, `be_error`, `include_text("str")`, `suggest("tool_name")
 
 ```bash
 rails g toolchest:install                # initializer, ApplicationToolbox, routes
-rails g toolchest:install --auth=oauth   # same + OAuth migration + views
-rails g toolchest Orders show create     # toolbox + views + spec
-rails g toolchest Admin::Orders show     # namespaced
+rails g toolchest:install --auth=oauth   # same + OAuth migration
+rails g toolchest:toolbox Orders show    # toolbox + views + spec
 rails g toolchest:auth token             # token migration
 rails g toolchest:auth oauth             # OAuth migration
 rails g toolchest:consent                # eject consent view
@@ -394,11 +417,11 @@ rails toolchest:token:revoke TOKEN=tcht_...       # revoke a token
 
 ## Error classes
 
-- `Toolchest::ParameterMissing` — raised by `params.require(:key)` when key is absent
+- `Toolchest::ParameterMissing` — raised by `params.require(:key)`
 - `Toolchest::MissingTemplate` — raised when implicit render can't find a view
 - `Toolchest::Error` — base error class
 
-Handle with `rescue_from` in your toolbox, same as Rails.
+Handle with `rescue_from` in your toolbox.
 
 ## File locations
 
@@ -411,3 +434,17 @@ app/views/toolboxes/admin/orders/show.json.jb namespaced view
 spec/toolboxes/orders_toolbox_spec.rb         spec
 config/initializers/toolchest.rb              config
 ```
+
+## Server config
+
+```ruby
+Toolchest.configure do |config|
+  config.server_name = "My App"
+  config.server_description = "Order management tools"
+  config.server_instructions = "Always look up the customer before modifying orders."
+end
+```
+
+## Completion
+
+Params with `enum:` automatically power `completion/complete`. No extra code needed.

@@ -28,10 +28,12 @@ RSpec.describe Toolchest::Auth::Token do
         ENV["TOOLCHEST_TOKEN_SCOPES"] = original_scopes
       end
 
-      it "authenticates matching token" do
+      it "returns AuthContext with token and scopes" do
         result = strategy.authenticate(request_with_token("secret_env_token"))
-        expect(result).to be_a(Toolchest::Auth::Token::EnvTokenRecord)
-        expect(result.token).to eq("secret_env_token")
+        expect(result).to be_a(Toolchest::AuthContext)
+        expect(result.token.token).to eq("secret_env_token")
+        expect(result.scopes).to eq(["orders:read", "users:write"])
+        expect(result.resource_owner).to be_nil
       end
 
       it "returns nil for wrong token" do
@@ -39,23 +41,14 @@ RSpec.describe Toolchest::Auth::Token do
         expect(result).to be_nil
       end
 
-      it "exposes owner_id from env" do
-        result = strategy.authenticate(request_with_token("secret_env_token"))
-        expect(result.owner_id).to eq("User:42")
-      end
-
-      it "parses scopes from env" do
-        result = strategy.authenticate(request_with_token("secret_env_token"))
-        expect(result.scopes).to eq(["orders:read", "users:write"])
-      end
-
-      it "passes through authenticate_with callback if configured" do
+      it "sets resource_owner from authenticate block" do
         Toolchest.configure do |c|
-          c.authenticate { |token_record| { user: token_record.owner_id } }
+          c.authenticate { |token_record| "user_#{token_record.owner_id}" }
         end
 
         result = strategy.authenticate(request_with_token("secret_env_token"))
-        expect(result).to eq(user: "User:42")
+        expect(result.resource_owner).to eq("user_User:42")
+        expect(result.scopes).to eq(["orders:read", "users:write"])
       end
     end
 
@@ -69,7 +62,6 @@ RSpec.describe Toolchest::Auth::Token do
       end
 
       it "returns nil when no DB token model is available" do
-        # find_db_token checks defined?(Toolchest::Token) which is false in unit tests
         result = strategy.authenticate(request_with_token("some_token"))
         expect(result).to be_nil
       end
