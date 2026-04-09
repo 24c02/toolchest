@@ -46,10 +46,10 @@ module Toolchest
           .flat_map { |a| a.send(:own_prompts) }
       end
 
-      def tool(description, name: nil, access: nil, &block)
+      def tool(description, name: nil, access: nil, annotations: nil, &block)
         builder = ToolBuilder.new
         builder.instance_eval(&block) if block
-        @_pending_tool = { description: description, custom_name: name, access_level: access, builder: builder }
+        @_pending_tool = { description: description, custom_name: name, access_level: access, annotations: annotations, builder: builder }
       end
 
       def default_param(name, type, description = "", **options)
@@ -109,7 +109,8 @@ module Toolchest
           params: params,
           toolbox_class: self,
           custom_name: pending[:custom_name],
-          access_level: pending[:access_level]
+          access_level: pending[:access_level],
+          annotations: pending[:annotations]
         )
 
         @_tool_definitions[method_name.to_sym] = definition
@@ -189,6 +190,76 @@ module Toolchest
     end
 
     def mcp_log(level, message) = Toolchest.router(Toolchest::Current.mount_key&.to_sym || :default).notify_log(level: level.to_s, message: message)
+
+    # Report progress during long-running actions.
+    # Client shows a progress bar. total and message are optional.
+    def mcp_progress(progress, total: nil, message: nil)
+      session = Toolchest::Current.mcp_session
+      return unless session
+
+      token = Toolchest::Current.mcp_progress_token
+      return unless token
+
+      session.notify_progress(
+        progress_token: token,
+        progress: progress,
+        total: total,
+        message: message,
+        related_request_id: Toolchest::Current.mcp_request_id
+      )
+    end
+
+    # Ask the client's LLM to do work. Returns the response text.
+    #
+    #   mcp_sample("Summarize this order", context: @order.to_json)
+    #
+    #   mcp_sample do |s|
+    #     s.system "You are a fraud analyst"
+    #     s.user "Analyze: #{@order.to_json}"
+    #     s.max_tokens 500
+    #     s.temperature 0.3
+    #   end
+    def mcp_sample(prompt = nil, context: nil, max_tokens: 1024, **kwargs, &block)
+      session = Toolchest::Current.mcp_session
+      raise Toolchest::Error, "Sampling requires an MCP client that supports it" unless session
+
+      if block
+        builder = SamplingBuilder.new
+        yield builder
+        messages = builder.messages
+        options = { max_tokens: builder.max_tokens_value || max_tokens }
+        options[:system_prompt] = builder.system_value if builder.system_value
+        options[:temperature] = builder.temperature_value if builder.temperature_value
+        options[:model_preferences] = builder.model_preferences_value if builder.model_preferences_value
+        options[:stop_sequences] = builder.stop_sequences_value if builder.stop_sequences_value
+      else
+        text = prompt.to_s
+        text = "#{text}\n\n#{context}" if context
+        messages = [{ role: "user", content: { type: "text", text: text } }]
+        options = { max_tokens: max_tokens }
+        options[:system_prompt] = kwargs[:system] if kwargs[:system]
+        options[:temperature] = kwargs[:temperature] if kwargs[:temperature]
+      end
+
+      begin
+        result = session.create_sampling_message(
+          messages: messages,
+          related_request_id: Toolchest::Current.mcp_request_id,
+          **options
+        )
+      rescue RuntimeError => e
+        raise Toolchest::Error, "Sampling failed: #{e.message}"
+      end
+
+      # Extract text from response
+      content = result[:content] || result["content"]
+      case content
+      when Hash then content[:text] || content["text"]
+      when Array then content.map { |c| c[:text] || c["text"] }.compact.join("\n")
+      when String then content
+      else result.to_s
+      end
+    end
 
     def dispatch(action_name)
       @_action_name = action_name

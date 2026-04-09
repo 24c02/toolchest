@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Sampling: `mcp_sample("prompt")` asks the client's LLM to do work from inside a tool action. Block form for full control. Raises `Toolchest::Error` if the client doesn't support it (rescue with `rescue_from`).
+- Progress: `mcp_progress(n, total: t, message: "...")` reports progress during long-running actions. Clients show a progress bar.
+- Annotations: `access: :read` sets `readOnlyHint: true`, `access: :write` sets `destructiveHint: true`. Override with `annotations: { openWorldHint: true }` on the tool macro.
+
 ## 0.2.0
 
 - **Breaking:** `auth` now returns `Toolchest::AuthContext` instead of the raw token. Use `auth.resource_owner` for the user, `auth.scopes` for scopes, `auth.token` for the raw record.

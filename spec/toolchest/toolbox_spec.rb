@@ -248,4 +248,118 @@ RSpec.describe Toolchest::Toolbox do
       expect(prompts.first[:block].call(thing_id: "123")).to eq([{ role: "user", content: "Debug 123" }])
     end
   end
+
+  describe "mcp_progress" do
+    it "sends progress notification via session" do
+      session = double("session")
+      expect(session).to receive(:notify_progress).with(
+        progress_token: "tok_123",
+        progress: 3,
+        total: 10,
+        message: "Processing",
+        related_request_id: "req_1"
+      )
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      Toolchest::Current.set(
+        mcp_session: session,
+        mcp_progress_token: "tok_123",
+        mcp_request_id: "req_1"
+      ) do
+        toolbox.mcp_progress(3, total: 10, message: "Processing")
+      end
+    end
+
+    it "is a no-op without a session" do
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+      # should not raise
+      toolbox.mcp_progress(1, total: 5)
+    end
+
+    it "is a no-op without a progress token" do
+      session = double("session")
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      Toolchest::Current.set(mcp_session: session) do
+        # no progress token — should not call send_notification
+        toolbox.mcp_progress(1, total: 5)
+      end
+    end
+  end
+
+  describe "mcp_sample" do
+    let(:session) { double("session") }
+
+    it "sends a simple prompt and returns text" do
+      expect(session).to receive(:create_sampling_message).with(
+        messages: [{ role: "user", content: { type: "text", text: "Summarize this" } }],
+        related_request_id: "req_1",
+        max_tokens: 1024
+      ).and_return({ content: { type: "text", text: "Here's the summary" } })
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      result = Toolchest::Current.set(mcp_session: session, mcp_request_id: "req_1") do
+        toolbox.mcp_sample("Summarize this")
+      end
+
+      expect(result).to eq("Here's the summary")
+    end
+
+    it "appends context to prompt" do
+      expect(session).to receive(:create_sampling_message).with(
+        messages: [{ role: "user", content: { type: "text", text: "Summarize\n\n{\"id\":1}" } }],
+        related_request_id: nil,
+        max_tokens: 1024
+      ).and_return({ content: { type: "text", text: "done" } })
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      result = Toolchest::Current.set(mcp_session: session) do
+        toolbox.mcp_sample("Summarize", context: '{"id":1}')
+      end
+
+      expect(result).to eq("done")
+    end
+
+    it "supports block form" do
+      expect(session).to receive(:create_sampling_message).with(
+        messages: [{ role: "user", content: { type: "text", text: "Analyze this" } }],
+        related_request_id: nil,
+        max_tokens: 500,
+        system_prompt: "You are an analyst",
+        temperature: 0.3
+      ).and_return({ content: { type: "text", text: "Analysis complete" } })
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      result = Toolchest::Current.set(mcp_session: session) do
+        toolbox.mcp_sample do |s|
+          s.system "You are an analyst"
+          s.user "Analyze this"
+          s.max_tokens 500
+          s.temperature 0.3
+        end
+      end
+
+      expect(result).to eq("Analysis complete")
+    end
+
+    it "raises without a session" do
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      expect { toolbox.mcp_sample("test") }.to raise_error(
+        Toolchest::Error, /Sampling requires an MCP client/
+      )
+    end
+  end
 end

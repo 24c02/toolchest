@@ -174,6 +174,73 @@ params.except(:internal_field)
 
 Params are automatically filtered to only keys declared in the tool's `param` block. Undeclared keys get dropped.
 
+### Sampling
+
+Ask the client's LLM to do work from inside a tool action:
+
+```ruby
+tool "Summarize an order" do
+  param :order_id, :string, "Order ID"
+end
+def summarize
+  @order = Order.find(params[:order_id])
+  summary = mcp_sample("Summarize this order for a support agent", context: @order.to_json)
+  render text: summary
+end
+```
+
+Block form for more control:
+
+```ruby
+summary = mcp_sample do |s|
+  s.system "You are a support analyst"
+  s.user "Analyze this order:\n#{@order.to_json}"
+  s.max_tokens 500
+  s.temperature 0.3
+end
+```
+
+Raises `Toolchest::Error` if the client doesn't support sampling. Handle it with `rescue_from` in your toolbox.
+
+### Progress
+
+Report progress during long-running actions. Clients that support it show a progress bar:
+
+```ruby
+tool "Import customers" do
+  param :file_url, :string, "CSV URL"
+end
+def import
+  rows = CSV.parse(download(params[:file_url]))
+  rows.each_with_index do |row, i|
+    Customer.create!(row.to_h)
+    mcp_progress i + 1, total: rows.size, message: "Importing #{row[:name]}"
+  end
+  render text: "Imported #{rows.size} customers"
+end
+```
+
+No-op if the client doesn't send a progress token.
+
+### Annotations
+
+Tool annotations tell the client about a tool's behavior. They're derived automatically from `access:`:
+
+```ruby
+tool "Show order", access: :read do    # → readOnlyHint: true, destructiveHint: false
+end
+
+tool "Delete order", access: :write do  # → readOnlyHint: false, destructiveHint: true
+end
+```
+
+Override or add hints with `annotations:`:
+
+```ruby
+tool "Export data", access: :read, annotations: { openWorldHint: true } do
+end
+```
+
 ### Logging
 
 ```ruby

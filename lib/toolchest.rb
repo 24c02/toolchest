@@ -14,6 +14,7 @@ module Toolchest
   autoload :RackApp, "toolchest/rack_app"
   autoload :Renderer, "toolchest/renderer"
   autoload :Router, "toolchest/router"
+  autoload :SamplingBuilder, "toolchest/sampling_builder"
   autoload :Toolbox, "toolchest/toolbox"
   autoload :ToolBuilder, "toolchest/tool_builder"
   autoload :ToolDefinition, "toolchest/tool_definition"

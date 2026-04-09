@@ -54,6 +54,60 @@ RSpec.describe Toolchest::ToolDefinition do
     end
   end
 
+  describe "#resolved_annotations" do
+    it "derives readOnlyHint from access: :read" do
+      td = described_class.new(
+        method_name: :show, description: "test", params: [],
+        toolbox_class: toolbox_class, access_level: :read
+      )
+      expect(td.resolved_annotations).to eq(readOnlyHint: true, destructiveHint: false)
+    end
+
+    it "derives destructiveHint from access: :write" do
+      td = described_class.new(
+        method_name: :destroy, description: "test", params: [],
+        toolbox_class: toolbox_class, access_level: :write
+      )
+      expect(td.resolved_annotations).to eq(readOnlyHint: false, destructiveHint: true)
+    end
+
+    it "returns empty hash when no access level" do
+      expect(definition.resolved_annotations).to eq({})
+    end
+
+    it "merges explicit annotations with derived ones" do
+      td = described_class.new(
+        method_name: :export, description: "test", params: [],
+        toolbox_class: toolbox_class, access_level: :read,
+        annotations: { openWorldHint: true }
+      )
+      expect(td.resolved_annotations).to eq(readOnlyHint: true, destructiveHint: false, openWorldHint: true)
+    end
+
+    it "allows explicit annotations to override derived ones" do
+      td = described_class.new(
+        method_name: :update, description: "test", params: [],
+        toolbox_class: toolbox_class, access_level: :write,
+        annotations: { destructiveHint: false }
+      )
+      expect(td.resolved_annotations[:destructiveHint]).to be false
+    end
+  end
+
+  describe "#to_mcp_schema annotations" do
+    it "includes annotations when access level is set" do
+      td = described_class.new(
+        method_name: :show, description: "test", params: [],
+        toolbox_class: toolbox_class, access_level: :read
+      )
+      expect(td.to_mcp_schema[:annotations]).to eq(readOnlyHint: true, destructiveHint: false)
+    end
+
+    it "omits annotations when empty" do
+      expect(definition.to_mcp_schema).not_to have_key(:annotations)
+    end
+  end
+
   describe "#input_schema" do
     it "marks required params" do
       schema = definition.input_schema

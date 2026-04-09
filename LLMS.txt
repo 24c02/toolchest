@@ -115,6 +115,34 @@ class OrdersToolbox < ApplicationToolbox
 end
 ```
 
+### Sampling (ask the client's LLM)
+
+```ruby
+tool "Summarize an order" do
+  param :order_id, :string, "Order ID"
+end
+def summarize
+  @order = Order.find(params[:order_id])
+  summary = mcp_sample("Summarize this order", context: @order.to_json)
+  render text: summary
+end
+```
+
+Block form: `mcp_sample { |s| s.system "..."; s.user "..."; s.max_tokens 500; s.temperature 0.3 }`
+
+Raises `Toolchest::Error` if the client doesn't support sampling.
+
+### Progress reporting
+
+```ruby
+items.each_with_index do |item, i|
+  process(item)
+  mcp_progress i + 1, total: items.size, message: "Processing #{item.name}"
+end
+```
+
+No-op if no progress token from client.
+
 ### Auth checks in before_action
 
 ```ruby
@@ -185,7 +213,9 @@ end
 
 Types: `:string`, `:integer`, `:number`, `:boolean`, `:object`, `[:object]`, `[:string]`, etc.
 
-Options on `tool`: `name: "custom_tool_name"`, `access: :read` or `access: :write` (for scope filtering).
+Options on `tool`: `name: "custom_tool_name"`, `access: :read` or `access: :write` (for scope filtering + annotations), `annotations: { openWorldHint: true }` (override hints).
+
+`access: :read` → `readOnlyHint: true, destructiveHint: false`. `access: :write` → `readOnlyHint: false, destructiveHint: true`.
 
 ## Instance methods in toolbox actions
 
@@ -205,6 +235,9 @@ render_errors @record             # MCP error from ActiveModel .errors
 suggests :action, "hint"          # suggest next tool call to the LLM
 suggests "full_tool_name", "hint" # suggest by full tool name
 mcp_log :info, "message"          # MCP log notification
+mcp_sample "prompt"               # ask client's LLM, returns text
+mcp_sample { |s| s.user "..." }  # block form with system, max_tokens, temperature
+mcp_progress 3, total: 10        # report progress (optional message:)
 halt error: "forbidden"           # stop execution, render error
 halt                              # stop execution (must have rendered already)
 ```

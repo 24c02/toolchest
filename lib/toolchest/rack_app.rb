@@ -83,7 +83,11 @@ module Toolchest
       handlers[MCP::Methods::PROMPTS_GET] = ->(params) { router.prompts_get_response(params) }
 
       # tools/call is hardcoded in handle_request to call private call_tool
-      server.define_singleton_method(:call_tool) do |params, **_kwargs|
+      server.define_singleton_method(:call_tool) do |params, session: nil, related_request_id: nil|
+        progress_token = params.dig(:_meta, :progressToken)
+        Toolchest::Current.mcp_session = session
+        Toolchest::Current.mcp_request_id = related_request_id
+        Toolchest::Current.mcp_progress_token = progress_token
         router.dispatch_response(params)
       end
 
