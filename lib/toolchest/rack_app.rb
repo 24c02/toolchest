@@ -16,7 +16,7 @@ module Toolchest
 
       auth = authenticate(request)
 
-      if auth.nil? && config.auth == :oauth
+      if auth.nil? && config.auth != :none
         mount_path = config.mount_path || "/mcp"
         resource_metadata = "#{request.base_url}/.well-known/oauth-protected-resource#{mount_path}"
         return [401, {

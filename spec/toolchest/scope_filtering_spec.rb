@@ -100,4 +100,52 @@ RSpec.describe "Scope filtering" do
       expect(router.tools_for_handler.length).to eq(5)
     end
   end
+
+  # --- dispatch enforcement ---
+
+  describe "dispatch scope enforcement" do
+    it "blocks tool execution when scope is insufficient" do
+      Toolchest.configuration.auth = :token
+      auth = Struct.new(:scopes).new("orders:read")
+      Toolchest::Current.set(auth: auth) do
+        result = router.dispatch("orders_cancel", {})
+        expect(result[:isError]).to be true
+        expect(result[:content].first[:text]).to include("Forbidden")
+      end
+    end
+
+    it "allows tool execution when scope matches" do
+      Toolchest.configuration.auth = :token
+      auth = Struct.new(:scopes).new("orders:write")
+      Toolchest::Current.set(auth: auth) do
+        result = router.dispatch("orders_cancel", { "id" => "1" })
+        expect(result[:isError]).to be true
+        expect(result[:content].first[:text]).not_to include("Forbidden")
+      end
+    end
+
+    it "blocks dispatch when auth is missing and auth is not :none" do
+      Toolchest.configuration.auth = :token
+      result = router.dispatch("orders_show", { "id" => "1" })
+      expect(result[:isError]).to be true
+      expect(result[:content].first[:text]).to include("Forbidden")
+    end
+
+    it "allows dispatch without auth when auth is :none" do
+      Toolchest.configuration.auth = :none
+      result = router.dispatch("orders_show", { "id" => "1" })
+      # should reach the stub, not get blocked
+      expect(result[:content].first[:text]).not_to include("Forbidden")
+    end
+
+    it "skips scope enforcement when filter_tools_by_scope is false" do
+      Toolchest.configuration.auth = :token
+      Toolchest.configuration.filter_tools_by_scope = false
+      auth = Struct.new(:scopes).new("orders:read")
+      Toolchest::Current.set(auth: auth) do
+        result = router.dispatch("orders_cancel", { "id" => "1" })
+        expect(result[:content].first[:text]).not_to include("Forbidden")
+      end
+    end
+  end
 end

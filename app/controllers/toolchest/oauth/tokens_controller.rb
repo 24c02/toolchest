@@ -38,6 +38,10 @@ module Toolchest
           return error_response("invalid_grant", "Redirect URI mismatch")
         end
 
+        if !grant.uses_pkce? && !app.confidential?
+          return error_response("invalid_request", "PKCE required for public clients")
+        end
+
         unless grant.verify_pkce(params[:code_verifier])
           return error_response("invalid_grant", "PKCE verification failed")
         end

@@ -315,6 +315,27 @@ RSpec.describe "OAuth flow", :db do
         expect(last_response.status).to eq(400)
         expect(json_response["error"]).to eq("unsupported_grant_type")
       end
+
+      it "rejects token exchange without PKCE for public clients" do
+        # Create a grant without code_challenge (no PKCE)
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: "orders:read"
+        }
+        location = URI.parse(last_response.headers["Location"])
+        code = URI.decode_www_form(location.query).to_h["code"]
+
+        post "/mcp/oauth/token", {
+          grant_type: "authorization_code",
+          code: code,
+          redirect_uri: redirect_uri,
+          client_id: client_id
+        }
+        expect(last_response.status).to eq(400)
+        expect(json_response["error"]).to eq("invalid_request")
+        expect(json_response["error_description"]).to include("PKCE")
+      end
     end
 
     describe "POST /mcp/oauth/token (refresh_token)" do
@@ -705,6 +726,35 @@ RSpec.describe "OAuth flow", :db do
       post "/mcp", {}.to_json, "CONTENT_TYPE" => "application/json"
       expect(last_response.status).to eq(401)
       expect(last_response.headers["WWW-Authenticate"]).to include("Bearer")
+    end
+  end
+
+  describe "MCP endpoint with token auth" do
+    around do |example|
+      original = ENV["TOOLCHEST_TOKEN"]
+      ENV["TOOLCHEST_TOKEN"] = "test_secret_token"
+      example.run
+    ensure
+      ENV["TOOLCHEST_TOKEN"] = original
+    end
+
+    before do
+      Toolchest.configure do |c|
+        c.auth = :token
+        c.mount_path = "/mcp"
+      end
+    end
+
+    it "returns 401 without a bearer token" do
+      post "/mcp", {}.to_json, "CONTENT_TYPE" => "application/json"
+      expect(last_response.status).to eq(401)
+    end
+
+    it "returns 401 with an invalid bearer token" do
+      post "/mcp", {}.to_json,
+        "CONTENT_TYPE" => "application/json",
+        "HTTP_AUTHORIZATION" => "Bearer wrong_token"
+      expect(last_response.status).to eq(401)
     end
   end
 end

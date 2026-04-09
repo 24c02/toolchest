@@ -51,6 +51,15 @@ module Toolchest
         return { content: [{ type: "text", text: "Unknown tool: #{tool_name}" }], isError: true }
       end
 
+      config = Toolchest.configuration(@mount_key)
+      if config.filter_tools_by_scope
+        auth = Toolchest::Current.auth
+        scopes = auth ? extract_scopes(auth) : nil
+        if config.auth != :none && (!scopes || !tool_allowed_by_scopes?(definition, scopes))
+          return { content: [{ type: "text", text: "Forbidden: insufficient scope" }], isError: true }
+        end
+      end
+
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       auth = Toolchest::Current.auth
       token_hint = extract_token_hint(auth)
