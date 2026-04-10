@@ -4,6 +4,7 @@ require "toolchest/version"
 
 module Toolchest
   autoload :App, "toolchest/app"
+  autoload :RouteDelegation, "toolchest/route_delegation"
   autoload :AuthContext, "toolchest/auth_context"
   autoload :Configuration, "toolchest/configuration"
   autoload :Current, "toolchest/current"
@@ -68,11 +69,28 @@ module Toolchest
     # When multiple OAuth mounts exist, bare /.well-known/* resolves to this mount
     attr_accessor :default_oauth_mount
 
+    # Parent class for engine HTML controllers. Default: "::ApplicationController".
+    # Set to "ActionController::Base" to avoid inheriting host app behavior.
+    attr_writer :base_controller
+    def base_controller
+      @base_controller || "::ApplicationController"
+    end
+
+    # Delegate unresolved _path/_url helpers to main_app so the host
+    # layout renders correctly inside engine views. Default: true.
+    # Set to false in an initializer to disable.
+    attr_writer :delegate_route_helpers
+    def delegate_route_helpers
+      @delegate_route_helpers != false
+    end
+
     def reset!
       @configs = nil
       @routers = nil
       @apps = nil
       @default_oauth_mount = nil
+      @base_controller = nil
+      @delegate_route_helpers = nil
     end
 
     # Reset only routers/apps (preserves config set by initializers)

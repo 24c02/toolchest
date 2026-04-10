@@ -16,6 +16,8 @@ module Toolchest
         subclass.instance_variable_set(:@_resources, [])
         subclass.instance_variable_set(:@_prompts, [])
         subclass.instance_variable_set(:@_pending_tool, nil)
+        subclass.instance_variable_set(:@_helper_methods, [])
+        subclass.instance_variable_set(:@_helper_modules, [])
       end
 
       def tool_definitions
@@ -117,6 +119,39 @@ module Toolchest
         @_tool_definitions[method_name.to_sym] = definition
       end
 
+      # Expose toolbox methods as view helpers, like controller helper_method.
+      #
+      #   helper_method :current_user, :admin?
+      #
+      def helper_method(*methods)
+        @_helper_methods.concat(methods.map(&:to_sym))
+      end
+
+      # Include modules as view helpers.
+      #
+      #   helper ApplicationHelper
+      #   helper FormattingHelper, CurrencyHelper
+      #
+      def helper(*modules)
+        @_helper_modules.concat(modules)
+      end
+
+      def helper_methods
+        ancestors
+          .select { |a| a.respond_to?(:own_helper_methods, true) }
+          .reverse
+          .flat_map { |a| a.send(:own_helper_methods) }
+          .uniq
+      end
+
+      def helper_modules
+        ancestors
+          .select { |a| a.respond_to?(:own_helper_modules, true) }
+          .reverse
+          .flat_map { |a| a.send(:own_helper_modules) }
+          .uniq
+      end
+
       def controller_name = name&.underscore&.chomp("_toolbox") || "anonymous"
 
       protected
@@ -128,6 +163,10 @@ module Toolchest
       def own_resources = @_resources || []
 
       def own_prompts = @_prompts || []
+
+      def own_helper_methods = @_helper_methods || []
+
+      def own_helper_modules = @_helper_modules || []
     end
 
     attr_reader :params

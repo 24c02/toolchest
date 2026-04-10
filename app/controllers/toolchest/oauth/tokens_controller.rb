@@ -1,7 +1,6 @@
 module Toolchest
   module Oauth
-    class TokensController < ::ApplicationController
-      skip_forgery_protection
+    class TokensController < ActionController::API
 
       # POST /mcp/oauth/token
       def create

@@ -1,6 +1,6 @@
 module Toolchest
   module Oauth
-    class AuthorizedApplicationsController < ::ApplicationController
+    class AuthorizedApplicationsController < Toolchest::ApplicationController
       before_action :authenticate_resource_owner!
 
       # GET /mcp/oauth/authorized_applications

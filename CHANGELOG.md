@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5
+
+- **View helpers:** `helper_method :current_user` exposes toolbox methods to jb/jbuilder views, same API as `ActionController::Base`. `helper ApplicationHelper` includes a module directly. Both inherit through `ApplicationToolbox`.
+- OAuth HTML controllers (consent, authorized apps) inherit from `Toolchest.base_controller` (default: `ApplicationController`). Set to `"ActionController::Base"` to opt out of host app behavior.
+- OAuth API controllers (token, metadata, registration) now use `ActionController::API` instead of inheriting from the host's `ApplicationController`.
+- Route helper delegation: `_path`/`_url` helpers in engine views fall through to `main_app` so host layouts work without `main_app.` prefixes. Disable with `Toolchest.delegate_route_helpers = false`.
+
 ## 0.3.4
 
 - **Security:** Empty-scoped tokens no longer bypass scope filtering when scopes are configured (fail closed).

@@ -1,6 +1,6 @@
 module Toolchest
   module Oauth
-    class MetadataController < ::ApplicationController
+    class MetadataController < ActionController::API
       # GET /.well-known/oauth-authorization-server(/*rest)
       def authorization_server
         mount_path, cfg = resolve_mount

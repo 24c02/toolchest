@@ -1,7 +1,6 @@
 module Toolchest
   module Oauth
-    class RegistrationsController < ::ApplicationController
-      skip_forgery_protection
+    class RegistrationsController < ActionController::API
       wrap_parameters false
 
       # POST /register — Dynamic Client Registration (RFC 7591)

@@ -12,6 +12,7 @@ module Toolchest
 
         lookup = ActionView::LookupContext.new(view_paths)
         view = ActionView::Base.with_empty_template_cache.new(lookup, assigns, nil)
+        apply_helpers(view, toolbox)
 
         result = view.render(template: template_name, formats: [:json])
 
@@ -71,6 +72,17 @@ module Toolchest
           assigns[key] = toolbox.instance_variable_get(ivar)
         end
         assigns
+      end
+
+      def apply_helpers(view, toolbox)
+        toolbox.class.helper_modules.each { |mod| view.extend(mod) }
+
+        toolbox.class.helper_methods.each do |method_name|
+          tb = toolbox
+          view.define_singleton_method(method_name) do |*args, **kwargs, &block|
+            tb.send(method_name, *args, **kwargs, &block)
+          end
+        end
       end
 
       def view_paths

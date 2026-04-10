@@ -1,6 +1,6 @@
 module Toolchest
   module Oauth
-    class AuthorizationsController < ::ApplicationController
+    class AuthorizationsController < Toolchest::ApplicationController
       before_action :authenticate_resource_owner!
       before_action :validate_client!
 

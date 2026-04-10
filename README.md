@@ -31,6 +31,8 @@ rails s
 ```ruby
 # app/toolboxes/application_toolbox.rb
 class ApplicationToolbox < Toolchest::Toolbox
+  helper_method :current_user
+
   def current_user = auth&.resource_owner
 
   rescue_from ActiveRecord::RecordNotFound do |e|
@@ -39,7 +41,7 @@ class ApplicationToolbox < Toolchest::Toolbox
 end
 ```
 
-This is your ApplicationController. `auth` returns a `Toolchest::AuthContext` with `.resource_owner` (whatever your `authenticate` block returns), `.scopes` (always from the token), and `.token` (the raw record). Define `current_user` as a convenience, add shared error handling, include your gems.
+This is your ApplicationController. `auth` returns a `Toolchest::AuthContext` with `.resource_owner` (whatever your `authenticate` block returns), `.scopes` (always from the token), and `.token` (the raw record). Define `current_user` as a convenience and expose it to views with `helper_method`, add shared error handling, include your gems.
 
 ```ruby
 # app/toolboxes/orders_toolbox.rb
@@ -129,6 +131,41 @@ render_errors @order            # MCP error from ActiveModel errors
 ```
 
 `render :show` after mutations. Most toolboxes need one or two views.
+
+### View helpers
+
+Toolbox methods aren't available in views by default — views only get instance variables. Use `helper_method` to expose methods, same as a Rails controller:
+
+```ruby
+class ApplicationToolbox < Toolchest::Toolbox
+  helper_method :current_user, :admin?
+
+  def current_user = auth&.resource_owner
+  def admin? = current_user&.admin?
+end
+```
+
+Now `current_user` and `admin?` work in any view:
+
+```ruby
+# app/views/toolboxes/orders/show.json.jb
+{
+  id: @order.id,
+  status: @order.status,
+  viewer: current_user.name,
+  can_edit: admin?
+}
+```
+
+Include entire modules with `helper`:
+
+```ruby
+class ApplicationToolbox < Toolchest::Toolbox
+  helper FormattingHelper
+end
+```
+
+Both `helper_method` and `helper` inherit through the toolbox hierarchy — define them in `ApplicationToolbox` and every toolbox gets them.
 
 ### Resources and prompts
 
@@ -359,6 +396,25 @@ Toolchest::OauthAccessToken.revoke_all_for(app, user.id)
 Toolchest::OauthAccessGrant.revoke_all_for(app, user.id)
 app.destroy  # cascades to all grants and tokens
 ```
+
+### Controller behavior
+
+The consent screen and authorized applications page inherit from your app's `ApplicationController` by default — so they get your auth, layout, nav, etc. Route helpers like `root_path` in your layout work automatically (Toolchest delegates unresolved `_path`/`_url` helpers to `main_app`).
+
+If you don't want host app behavior on these pages:
+
+```ruby
+# config/initializers/toolchest.rb
+Toolchest.base_controller = "ActionController::Base"
+```
+
+To disable the route helper delegation:
+
+```ruby
+Toolchest.delegate_route_helpers = false
+```
+
+API-only endpoints (token exchange, metadata, dynamic registration) always use `ActionController::API` regardless of this setting.
 
 ### Custom
 
