@@ -523,9 +523,22 @@ config.required_scopes = ["orders:read"]
 config.allowed_scopes_for do |user, requested_scopes|
   user.admin? ? requested_scopes : requested_scopes - ["admin:write"]
 end
+
 ```
 
 Scopes hidden by `allowed_scopes_for` never appear on the consent screen and can't be granted even if the POST is tampered with.
+
+### Blocking users from linking
+
+Gate who can link an MCP client to their account with `authorize_link`. If it returns falsy, the user is redirected with `access_denied` before they ever see a consent screen.
+
+```ruby
+config.authorize_link do |user|
+  !user.banned?
+end
+```
+
+Only applies when using `auth: :oauth`. For `auth: :token` or custom strategies, gate access in your own authentication layer.
 
 ## Multi-mount
 

@@ -715,6 +715,81 @@ RSpec.describe "OAuth flow", :db do
         expect(json_response["scope"]).to eq("orders:read")
       end
     end
+
+    context "with authorize_link" do
+      let(:blocked_user) { Struct.new(:id, :blocked?).new(99, true) }
+
+      before do
+        Toolchest.configure do |c|
+          c.auth = :oauth
+          c.mount_path = "/mcp"
+          c.scopes = {
+            "orders:read" => "View orders",
+            "orders:write" => "Modify orders"
+          }
+          c.current_user_for_oauth { |_| blocked_user }
+          c.authorize_link { |user| !user.blocked? }
+        end
+      end
+
+      it "redirects with access_denied on GET authorize" do
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read orders:write",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(302)
+        query = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h
+        expect(query["error"]).to eq("access_denied")
+      end
+
+      it "redirects with access_denied on POST authorize" do
+        post "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          scope: ["orders:read"],
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(302)
+        query = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h
+        expect(query["error"]).to eq("access_denied")
+      end
+
+      it "rejects even when required_scopes are configured" do
+        Toolchest.configure { |c| c.required_scopes = ["orders:read"] }
+
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(302)
+        query = URI.decode_www_form(URI.parse(last_response.headers["Location"]).query).to_h
+        expect(query["error"]).to eq("access_denied")
+      end
+
+      it "allows connection when block returns true" do
+        allowed_user = Struct.new(:id, :blocked?).new(1, false)
+        Toolchest.configure { |c| c.current_user_for_oauth { |_| allowed_user } }
+
+        get "/mcp/oauth/authorize", {
+          client_id: client_id,
+          redirect_uri: redirect_uri,
+          response_type: "code",
+          scope: "orders:read",
+          code_challenge: challenge,
+          code_challenge_method: "S256"
+        }
+        expect(last_response.status).to eq(200)
+      end
+    end
   end
 
   # ============================================================

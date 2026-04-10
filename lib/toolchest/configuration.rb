@@ -23,6 +23,7 @@ module Toolchest
       @optional_scopes = false
       @required_scopes = []
       @allowed_scopes_for_block = nil
+      @authorize_link_block = nil
       @additional_view_paths = []
       @access_token_expires_in = 7200
       @toolboxes = nil
@@ -50,6 +51,19 @@ module Toolchest
     def authenticate_with(token)
       return nil unless @authenticate_block
       @authenticate_block.call(token)
+    end
+
+    def authorize_link(&block)
+      if block
+        @authorize_link_block = block
+      else
+        @authorize_link_block
+      end
+    end
+
+    def authorize_link?(user)
+      return true unless @authorize_link_block
+      @authorize_link_block.call(user)
     end
 
     def allowed_scopes_for(&block)

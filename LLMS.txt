@@ -374,6 +374,9 @@ config.required_scopes = ["orders:read"]         # always granted, can't uncheck
 config.allowed_scopes_for do |user, requested|   # per-user gating (default: show all)
   user.admin? ? requested : requested - ["admin:write"]
 end
+config.authorize_link do |user|            # block user from linking (OAuth only, default: allow all)
+  !user.banned?
+end
 ```
 
 ## Resources and prompts

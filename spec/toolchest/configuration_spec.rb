@@ -144,6 +144,25 @@ RSpec.describe Toolchest::Configuration do
     end
   end
 
+  describe "#authorize_link" do
+    it "stores and retrieves the block" do
+      config.authorize_link { |user| user.admin? }
+      expect(config.authorize_link).to be_a(Proc)
+    end
+  end
+
+  describe "#authorize_link?" do
+    it "returns true when no block configured" do
+      expect(config.authorize_link?(:anyone)).to be true
+    end
+
+    it "delegates to the block" do
+      config.authorize_link { |user| user == :allowed }
+      expect(config.authorize_link?(:allowed)).to be true
+      expect(config.authorize_link?(:denied)).to be false
+    end
+  end
+
   describe "#allowed_scopes_for" do
     it "stores and retrieves the block" do
       config.allowed_scopes_for { |user, scopes| scopes }

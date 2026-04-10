@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6
+
+- `authorize_link`: gate which users can link MCP clients to their account. Runs before the OAuth consent screen; return falsy to reject with `access_denied`.
+
 ## 0.3.5
 
 - **View helpers:** `helper_method :current_user` exposes toolbox methods to jb/jbuilder views, same API as `ActionController::Base`. `helper ApplicationHelper` includes a module directly. Both inherit through `ApplicationToolbox`.

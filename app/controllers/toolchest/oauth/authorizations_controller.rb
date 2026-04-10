@@ -11,6 +11,16 @@ module Toolchest
         @optional = toolchest_config.optional_scopes
         @original_scope = requested_scopes.join(" ")
 
+        unless toolchest_config.authorize_link?(@current_resource_owner)
+          redirect_url = build_redirect(params[:redirect_uri],
+            error: "access_denied",
+            error_description: "User is not authorized to connect",
+            state: params[:state]
+          )
+          redirect_to redirect_url, allow_other_host: true
+          return
+        end
+
         requested = requested_scopes
         allowed = toolchest_config.resolve_allowed_scopes(@current_resource_owner, requested)
         known = toolchest_config.scopes.keys
@@ -36,6 +46,16 @@ module Toolchest
 
       # POST /mcp/oauth/authorize — approve and redirect with code
       def create
+        unless toolchest_config.authorize_link?(@current_resource_owner)
+          redirect_url = build_redirect(params[:redirect_uri],
+            error: "access_denied",
+            error_description: "User is not authorized to connect",
+            state: params[:state]
+          )
+          redirect_to redirect_url, allow_other_host: true
+          return
+        end
+
         requested = original_requested_scopes
         allowed = toolchest_config.resolve_allowed_scopes(@current_resource_owner, requested)
         known = toolchest_config.scopes.keys
