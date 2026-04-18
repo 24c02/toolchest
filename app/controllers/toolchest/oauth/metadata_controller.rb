@@ -37,14 +37,9 @@ module Toolchest
       # Returns [mount_path, config] or renders 404 and returns [nil, nil].
       def resolve_mount
         if params[:rest].present?
-          # Suffixed path (RFC 8414) — must match a configured mount exactly.
           path = "/#{params[:rest]}"
           key = Toolchest.mount_keys.find { |k| Toolchest.configuration(k).mount_path == path }
-          unless key
-            head :not_found
-            return [nil, nil]
-          end
-          return [path, Toolchest.configuration(key)]
+          return [path, Toolchest.configuration(key)] if key
         end
 
         # No suffix (e.g. Cursor). Use default_oauth_mount if set.

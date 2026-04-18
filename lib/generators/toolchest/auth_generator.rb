@@ -19,7 +19,7 @@ module Toolchest
         end
       end
 
-      def create_migration
+      def copy_migration
         case strategy
         when "token"
           migration_template "create_toolchest_tokens.rb.tt",

@@ -432,6 +432,34 @@ RSpec.describe "OAuth flow", :db do
     end
   end
 
+  describe "suffixed discovery without explicit mount_path" do
+    before do
+      Toolchest.configure do |c|
+        c.auth = :oauth
+        c.mount_path = nil
+        c.scopes = {
+          "orders:read" => "View orders",
+          "orders:write" => "Modify orders"
+        }
+        c.current_user_for_oauth { |_req| fake_user }
+      end
+    end
+
+    it "resolves oauth-authorization-server via auto-detect" do
+      get "/.well-known/oauth-authorization-server/mcp"
+      expect(last_response.status).to eq(200)
+      body = json_response
+      expect(body["authorization_endpoint"]).to include("/mcp/oauth/authorize")
+    end
+
+    it "resolves oauth-protected-resource via auto-detect" do
+      get "/.well-known/oauth-protected-resource/mcp"
+      expect(last_response.status).to eq(200)
+      body = json_response
+      expect(body["resource"]).to include("/mcp")
+    end
+  end
+
   # ============================================================
   # Authorized Applications
   # ============================================================

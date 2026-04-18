@@ -17,6 +17,12 @@ module Toolchest
     def call(env)
       Engine.ensure_initialized!
       env["toolchest.mount_key"] = @mount_key.to_s
+
+      cfg = Toolchest.configuration(@mount_key)
+      if cfg.mount_path.nil? && env["SCRIPT_NAME"].present?
+        cfg.mount_path = env["SCRIPT_NAME"]
+      end
+
       @router.call(env)
     end
 
