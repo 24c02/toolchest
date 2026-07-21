@@ -23,7 +23,10 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.add_dependency "rails", ">= 7.0"
-  spec.add_dependency "mcp", ">= 0.10"
+  # RackApp overrides private mcp internals (call_tool/get_prompt/complete and the
+  # @handlers table), so new mcp releases can break us silently — bump the upper
+  # bound deliberately after checking the new release's dispatch code.
+  spec.add_dependency "mcp", ">= 0.23", "< 0.26"
   # View layer: bring your own. jb (recommended), jbuilder, or blueprinter all work.
 
   spec.metadata = {

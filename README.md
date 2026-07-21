@@ -584,6 +584,16 @@ config.tool_naming = ->(prefix, method) { "#{prefix}__#{method}" }
 
 Per-tool: `tool "description", name: "custom_name"`
 
+## DNS rebinding protection
+
+The MCP transport can validate `Host`/`Origin` headers to block DNS rebinding. By default this is on only when `config.auth = :none` (the vulnerable case — bearer-authenticated servers aren't rebindable, since a rebound browser can't attach the token). Unauthenticated servers accept loopback hosts (`localhost` and the IPv4/IPv6 loopback addresses) out of the box; widen or override:
+
+```ruby
+config.allowed_hosts = ["mcp.example.com"]     # extra Host values (bare host or host:port)
+config.allowed_origins = ["https://app.example.com"]
+config.dns_rebinding_protection = true         # force on/off; default :auto (on iff auth is :none)
+```
+
 ## Generators
 
 ```bash
