@@ -7,7 +7,8 @@ module Toolchest
                   :scopes, :login_path, :additional_view_paths,
                   :access_token_expires_in, :toolboxes, :toolbox_module,
                   :mount_key, :mount_path,
-                  :optional_scopes, :required_scopes
+                  :optional_scopes, :required_scopes,
+                  :allowed_hosts, :allowed_origins, :dns_rebinding_protection
     attr_reader :auth
 
     def initialize(mount_key = :default)
@@ -28,6 +29,13 @@ module Toolchest
       @access_token_expires_in = 7200
       @toolboxes = nil
       @toolbox_module = nil
+      @allowed_hosts = nil
+      @allowed_origins = nil
+      # :auto enables the transport's DNS-rebinding Host/Origin validation only
+      # when auth is :none — bearer-authenticated deployments aren't rebindable
+      # (a rebound browser can't attach the token), and validating there would
+      # 403 every prod Host header unless allowed_hosts is configured.
+      @dns_rebinding_protection = :auto
     end
 
     def auth=(value)

@@ -5,7 +5,7 @@ module Toolchest
     def initialize(mount_key: :default)
       @mount_key = mount_key.to_sym
       @server = build_mcp_server
-      @transport = MCP::Server::Transports::StreamableHTTPTransport.new(@server)
+      @transport = build_transport
       @server.transport = @transport
       install_handlers!
     end
@@ -67,6 +67,20 @@ module Toolchest
       MCP::Server.new(**opts)
     end
 
+    def build_transport
+      protection = case config.dns_rebinding_protection
+      when :auto then config.auth == :none
+      else config.dns_rebinding_protection
+      end
+
+      MCP::Server::Transports::StreamableHTTPTransport.new(
+        @server,
+        allowed_hosts: config.allowed_hosts,
+        allowed_origins: config.allowed_origins,
+        dns_rebinding_protection: protection
+      )
+    end
+
     def install_handlers!
       router = Toolchest.router(@mount_key)
       server = @server
@@ -75,15 +89,19 @@ module Toolchest
 
       handlers = server.instance_variable_get(:@handlers)
 
-      handlers[MCP::Methods::TOOLS_LIST] = ->(params) { router.tools_for_handler }
-      handlers[MCP::Methods::RESOURCES_LIST] = ->(params) { router.resources_for_handler }
+      # Since mcp 0.15, list handlers return the full result object (the server
+      # no longer wraps them in { tools: ... } etc.). resources/read is the
+      # exception: its handler result still becomes `contents`.
+      handlers[MCP::Methods::TOOLS_LIST] = ->(params) { { tools: router.tools_for_handler } }
+      handlers[MCP::Methods::RESOURCES_LIST] = ->(params) { { resources: router.resources_for_handler } }
       handlers[MCP::Methods::RESOURCES_READ] = ->(params) { router.resources_read_response(params) }
-      handlers[MCP::Methods::RESOURCES_TEMPLATES_LIST] = ->(params) { router.resource_templates_for_handler }
-      handlers[MCP::Methods::PROMPTS_LIST] = ->(params) { router.prompts_for_handler }
-      handlers[MCP::Methods::PROMPTS_GET] = ->(params) { router.prompts_get_response(params) }
+      handlers[MCP::Methods::RESOURCES_TEMPLATES_LIST] = ->(params) { { resourceTemplates: router.resource_templates_for_handler } }
+      handlers[MCP::Methods::PROMPTS_LIST] = ->(params) { { prompts: router.prompts_for_handler } }
 
-      # tools/call is hardcoded in handle_request to call private call_tool
-      server.define_singleton_method(:call_tool) do |params, session: nil, related_request_id: nil|
+      # tools/call, prompts/get, and completion/complete are hardcoded in
+      # handle_request to call these private methods (bypassing @handlers),
+      # so they must be overridden as singleton methods.
+      server.define_singleton_method(:call_tool) do |params, session: nil, related_request_id: nil, cancellation: nil|
         progress_token = params.dig(:_meta, :progressToken)
         Toolchest::Current.mcp_session = session
         Toolchest::Current.mcp_request_id = related_request_id
@@ -91,9 +109,13 @@ module Toolchest
         router.dispatch_response(params)
       end
 
-      # completion/complete is hardcoded to call private complete, which validates
-      # against registered prompts/resources (we don't register any). override it.
-      server.define_singleton_method(:complete) do |params|
+      server.define_singleton_method(:get_prompt) do |params, session: nil, related_request_id: nil, cancellation: nil|
+        router.prompts_get_response(params)
+      end
+
+      # the stock complete validates against registered prompts/resources
+      # (we don't register any), so replace it wholesale.
+      server.define_singleton_method(:complete) do |params, session: nil, related_request_id: nil, cancellation: nil|
         arg_name = params.dig(:argument, :name) || params.dig(:argument, "name")
         values = arg_name ? router.completion_values(arg_name) : []
         { completion: { values: values, hasMore: false } }
