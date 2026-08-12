@@ -21,7 +21,7 @@ module Toolchest
       def toolchest_config = Toolchest.configuration(mount_key.to_sym)
 
       def handle_authorization_code
-        grant = Toolchest::OauthAccessGrant.find_by_code(params[:code])
+        grant = Toolchest::OauthAccessGrant.find_by_code(params[:code], mount_key: mount_key)
 
         unless grant
           return error_response("invalid_grant", "Authorization code not found or expired")
@@ -29,7 +29,11 @@ module Toolchest
 
         app = grant.application
 
-        if params[:client_id].present? && app.uid != params[:client_id]
+        unless params[:client_id].present?
+          return error_response("invalid_request", "client_id is required")
+        end
+
+        if app.uid != params[:client_id]
           return error_response("invalid_client", "Client ID mismatch")
         end
 
@@ -37,8 +41,8 @@ module Toolchest
           return error_response("invalid_grant", "Redirect URI mismatch")
         end
 
-        if !grant.uses_pkce? && !app.confidential?
-          return error_response("invalid_request", "PKCE required for public clients")
+        unless grant.uses_pkce?
+          return error_response("invalid_request", "PKCE is required")
         end
 
         unless grant.verify_pkce(params[:code_verifier])
