@@ -317,6 +317,43 @@ module Toolchest
       end
     end
 
+    # Ask the client's user for input via a form.
+    # Returns the elicitation result hash from the client.
+    #
+    #   result = mcp_elicit("Please confirm the shipping address",
+    #     schema: {
+    #       type: "object",
+    #       properties: {
+    #         confirmed: { type: "boolean", description: "Address is correct?" }
+    #       },
+    #       required: ["confirmed"]
+    #     })
+    #   halt error: "Cancelled" unless result["action"] == "accept"
+    #
+    def mcp_elicit(message, schema:)
+      ctx = Toolchest::Current.mcp_server_context
+      raise Toolchest::Error, "Elicitation requires an MCP client that supports it" unless ctx
+
+      begin
+        ctx.create_form_elicitation(message: message, requested_schema: schema)
+      rescue RuntimeError => e
+        raise Toolchest::Error, "Elicitation failed: #{e.message}"
+      end
+    end
+
+    # Check if the current request has been cancelled by the client.
+    def mcp_cancelled?
+      ctx = Toolchest::Current.mcp_server_context
+      ctx&.cancelled? || false
+    end
+
+    # Raise MCP::CancelledError if the current request has been cancelled.
+    # Use in long-running loops to bail early.
+    def mcp_raise_if_cancelled!
+      ctx = Toolchest::Current.mcp_server_context
+      ctx&.raise_if_cancelled!
+    end
+
     def dispatch(action_name)
       @_action_name = action_name
 

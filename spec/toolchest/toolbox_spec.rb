@@ -1,4 +1,5 @@
 require "spec_helper"
+require "mcp"
 
 RSpec.describe Toolchest::Toolbox do
   let(:toolbox_class) do
@@ -428,6 +429,79 @@ RSpec.describe Toolchest::Toolbox do
 
       p = klass.prompts.first
       expect(p[:title]).to eq("Debug Helper")
+    end
+  end
+
+  describe "mcp_elicit" do
+    it "raises without a server context" do
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      expect { toolbox.mcp_elicit("Pick one", schema: { type: "object" }) }.to raise_error(
+        Toolchest::Error, /Elicitation requires an MCP client/
+      )
+    end
+
+    it "delegates to server context create_form_elicitation" do
+      ctx = double("server_context")
+      expect(ctx).to receive(:create_form_elicitation).with(
+        message: "Confirm?",
+        requested_schema: { type: "object", properties: { ok: { type: "boolean" } } }
+      ).and_return({ "action" => "accept", "content" => { "ok" => true } })
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      result = Toolchest::Current.set(mcp_server_context: ctx) do
+        toolbox.mcp_elicit("Confirm?", schema: { type: "object", properties: { ok: { type: "boolean" } } })
+      end
+
+      expect(result["action"]).to eq("accept")
+    end
+  end
+
+  describe "mcp_cancelled?" do
+    it "returns false without a server context" do
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      expect(toolbox.mcp_cancelled?).to be false
+    end
+
+    it "delegates to server context cancelled?" do
+      ctx = double("server_context", cancelled?: true)
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      result = Toolchest::Current.set(mcp_server_context: ctx) do
+        toolbox.mcp_cancelled?
+      end
+
+      expect(result).to be true
+    end
+  end
+
+  describe "mcp_raise_if_cancelled!" do
+    it "is a no-op without a server context" do
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      expect { toolbox.mcp_raise_if_cancelled! }.not_to raise_error
+    end
+
+    it "raises when cancelled" do
+      ctx = double("server_context")
+      allow(ctx).to receive(:raise_if_cancelled!).and_raise(MCP::CancelledError.new(request_id: "r1"))
+
+      definition = toolbox_class.tool_definitions[:show]
+      toolbox = toolbox_class.new(params: { order_id: "1" }, tool_definition: definition)
+
+      expect {
+        Toolchest::Current.set(mcp_server_context: ctx) do
+          toolbox.mcp_raise_if_cancelled!
+        end
+      }.to raise_error(MCP::CancelledError)
     end
   end
 end
