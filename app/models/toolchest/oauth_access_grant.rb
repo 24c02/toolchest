@@ -65,7 +65,11 @@ module Toolchest
         grant
       end
 
-      def find_by_code(raw_code) = active.find_by(token_digest: Digest::SHA256.hexdigest(raw_code))
+      def find_by_code(raw_code, mount_key: nil)
+        scope = active.where(token_digest: Digest::SHA256.hexdigest(raw_code))
+        scope = scope.where(mount_key: mount_key) if mount_key
+        scope.first
+      end
     end
 
     def raw_code = @raw_code
