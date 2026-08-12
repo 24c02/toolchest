@@ -229,17 +229,29 @@ module Toolchest
       throw :halt
     end
 
-    def mcp_log(level, message) = Toolchest.router(Toolchest::Current.mount_key&.to_sym || :default).notify_log(level: level.to_s, message: message)
+    def mcp_log(level, message)
+      ctx = Toolchest::Current.mcp_server_context
+      if ctx
+        ctx.notify_log_message(data: message, level: level.to_s, logger: "Toolchest")
+      else
+        Toolchest.router(Toolchest::Current.mount_key&.to_sym || :default).notify_log(level: level.to_s, message: message)
+      end
+    end
 
     # Report progress during long-running actions.
     # Client shows a progress bar. total and message are optional.
     def mcp_progress(progress, total: nil, message: nil)
+      ctx = Toolchest::Current.mcp_server_context
+      if ctx
+        ctx.report_progress(progress, total: total, message: message)
+        return
+      end
+
+      # Legacy fallback
       session = Toolchest::Current.mcp_session
       return unless session
-
       token = Toolchest::Current.mcp_progress_token
       return unless token
-
       session.notify_progress(
         progress_token: token,
         progress: progress,
@@ -260,7 +272,8 @@ module Toolchest
     #     s.temperature 0.3
     #   end
     def mcp_sample(prompt = nil, context: nil, max_tokens: 1024, **kwargs, &block)
-      session = Toolchest::Current.mcp_session
+      ctx = Toolchest::Current.mcp_server_context
+      session = ctx || Toolchest::Current.mcp_session
       raise Toolchest::Error, "Sampling requires an MCP client that supports it" unless session
 
       if block
@@ -282,11 +295,10 @@ module Toolchest
       end
 
       begin
-        result = session.create_sampling_message(
-          messages: messages,
-          related_request_id: Toolchest::Current.mcp_request_id,
-          **options
-        )
+        call_opts = { messages: messages, **options }
+        # Legacy path: explicitly pass related_request_id (ServerContext handles this automatically)
+        call_opts[:related_request_id] = Toolchest::Current.mcp_request_id unless ctx
+        result = session.create_sampling_message(**call_opts)
       rescue RuntimeError => e
         raise Toolchest::Error, "Sampling failed: #{e.message}"
       end
