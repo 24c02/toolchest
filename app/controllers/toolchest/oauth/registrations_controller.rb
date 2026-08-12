@@ -31,6 +31,23 @@ module Toolchest
           }, status: :bad_request
         end
 
+        uris.each do |u|
+          begin
+            parsed = URI.parse(u)
+            unless parsed.scheme && parsed.host
+              return render json: {
+                error: "invalid_client_metadata",
+                error_description: "Redirect URI must have a scheme and host"
+              }, status: :bad_request
+            end
+          rescue URI::InvalidURIError
+            return render json: {
+              error: "invalid_client_metadata",
+              error_description: "Redirect URI is not a valid URI"
+            }, status: :bad_request
+          end
+        end
+
         application = Toolchest::OauthApplication.new(
           name: name,
           redirect_uri: uris.join("\n"),
