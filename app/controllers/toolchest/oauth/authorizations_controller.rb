@@ -133,6 +133,25 @@ module Toolchest
 
         if params[:redirect_uri].present? && !@application.redirect_uri_matches?(params[:redirect_uri])
           render json: { error: "invalid_redirect_uri" }, status: :bad_request
+          return
+        end
+
+        if params[:response_type].present? && params[:response_type] != "code"
+          redirect_url = build_redirect(params[:redirect_uri],
+            error: "unsupported_response_type",
+            state: params[:state]
+          )
+          redirect_to redirect_url, allow_other_host: true
+          return
+        end
+
+        if params[:code_challenge_method].present? && params[:code_challenge_method] != "S256"
+          redirect_url = build_redirect(params[:redirect_uri],
+            error: "invalid_request",
+            error_description: "Only S256 code_challenge_method is supported",
+            state: params[:state]
+          )
+          redirect_to redirect_url, allow_other_host: true
         end
       end
 
