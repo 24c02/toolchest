@@ -18,6 +18,13 @@ module Toolchest
 
     def revoke! = update!(revoked_at: Time.current)
 
+    # Atomic revocation — returns true only if THIS call revoked the token.
+    # Prevents race conditions where two concurrent refresh exchanges both
+    # find the token active and both mint new token pairs.
+    def revoke_atomically!
+      self.class.where(id: id, revoked_at: nil).update_all(revoked_at: Time.current) > 0
+    end
+
     def accessible? = !revoked? && !expired?
 
     def scopes_array = (scopes || "").split(" ").reject(&:empty?)

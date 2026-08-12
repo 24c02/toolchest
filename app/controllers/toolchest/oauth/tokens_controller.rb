@@ -69,7 +69,13 @@ module Toolchest
           return error_response("invalid_grant", "Refresh token invalid or expired")
         end
 
-        old_token.revoke!
+        if params[:client_id].present? && old_token.application&.uid != params[:client_id]
+          return error_response("invalid_client", "Client ID mismatch")
+        end
+
+        unless old_token.revoke_atomically!
+          return error_response("invalid_grant", "Refresh token already used")
+        end
 
         token = Toolchest::OauthAccessToken.create_for(
           application: old_token.application,
