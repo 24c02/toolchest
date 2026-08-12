@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    toolchest (0.3.7)
+    toolchest (0.4.0)
       mcp (>= 1.0)
       rails (>= 7.0)
 

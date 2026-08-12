@@ -278,6 +278,79 @@ tool "Export data", access: :read, annotations: { openWorldHint: true } do
 end
 ```
 
+### Elicitation
+
+Ask the client's user for input via a form. Returns the result hash from the client.
+
+```ruby
+tool "Confirm shipping address" do
+  param :order_id, :string, "Order ID"
+end
+def confirm_address
+  @order = Order.find(params[:order_id])
+  result = mcp_elicit("Please confirm the shipping address: #{@order.address}",
+    schema: {
+      type: "object",
+      properties: {
+        confirmed: { type: "boolean", description: "Address is correct?" }
+      },
+      required: ["confirmed"]
+    })
+  halt error: "Cancelled" unless result["action"] == "accept"
+  @order.confirm_address!
+  render :show
+end
+```
+
+Raises `Toolchest::Error` if the client doesn't support elicitation.
+
+### Cancellation
+
+Check if the client cancelled the current request. Useful in long-running loops:
+
+```ruby
+tool "Import customers" do
+  param :file_url, :string, "CSV URL"
+end
+def import
+  rows = CSV.parse(download(params[:file_url]))
+  rows.each_with_index do |row, i|
+    mcp_raise_if_cancelled!
+    Customer.create!(row.to_h)
+    mcp_progress i + 1, total: rows.size
+  end
+  render text: "Imported #{rows.size} customers"
+end
+```
+
+`mcp_cancelled?` returns a boolean. `mcp_raise_if_cancelled!` raises `MCP::CancelledError` to bail out immediately.
+
+### Tool titles and output schemas
+
+`title:` sets a human-readable display name. `output:` declares the tool's output JSON schema:
+
+```ruby
+tool "Look up an order", title: "Order Lookup",
+  output: { type: "object", properties: { id: { type: "string" }, status: { type: "string" } } } do
+  param :order_id, :string, "Order ID"
+end
+def show
+  # ...
+end
+```
+
+`title:` also works on `resource` and `prompt`:
+
+```ruby
+resource "orders://schema", name: "Order schema", title: "Schema: Orders" do
+  # ...
+end
+
+prompt "debug-order", title: "Debug Order" do |order_id:|
+  # ...
+end
+```
+
 ### Logging
 
 ```ruby
@@ -299,6 +372,51 @@ end
 ```
 
 This shows up in the MCP initialize response. `server_name` and `server_description` are also available.
+
+### Transport security
+
+Configure host validation, origin checking, and session limits:
+
+```ruby
+Toolchest.configure do |config|
+  config.allowed_hosts = ["myapp.com", "mcp.myapp.com"]
+  config.allowed_origins = ["https://myapp.com"]
+  config.dns_rebinding_protection = true
+  config.session_idle_timeout = 30.minutes
+  config.max_sessions = 100
+  config.stateless = false
+end
+```
+
+`dns_rebinding_protection` validates the `Host` header against `allowed_hosts` to prevent DNS rebinding attacks. `stateless` disables server-side session state entirely (every request is standalone). `session_idle_timeout` evicts idle sessions, `max_sessions` caps total concurrent sessions.
+
+### Caching and pagination
+
+Control list pagination and cache behavior for resources:
+
+```ruby
+Toolchest.configure do |config|
+  config.page_size = 50
+  config.cache_ttl = 5.minutes
+  config.cache_scope = "public"
+end
+```
+
+`page_size` sets the default page size for paginated list responses. `cache_ttl` and `cache_scope` control how long clients can cache list and read results. `cache_scope` is `"public"` (shared caches allowed) or `"private"` (client-only).
+
+### Instrumentation
+
+Every tool dispatch fires an `ActiveSupport::Notifications` event:
+
+```ruby
+ActiveSupport::Notifications.subscribe("dispatch.toolchest") do |*args|
+  event = ActiveSupport::Notifications::Event.new(*args)
+  Rails.logger.info "[toolchest] #{event.payload[:tool]} " \
+    "#{event.payload[:duration]}ms error=#{event.payload[:error]}"
+end
+```
+
+Payload includes `:tool`, `:toolbox`, `:action`, `:arguments`, `:duration` (ms), and `:error` (boolean).
 
 ## Auth
 
@@ -630,10 +748,11 @@ end
 
 - **Rate limiting**: Toolchest doesn't include rate limiting. Use [rack-attack](https://github.com/rack/rack-attack) or your reverse proxy to protect token and registration endpoints.
 - **HTTPS**: OAuth endpoints should always run behind TLS in production.
+- **DNS rebinding**: Built-in protection via `config.dns_rebinding_protection` and `config.allowed_hosts`. See [Transport security](#transport-security).
 
 ## Internals
 
-Transport is the [MCP Ruby SDK](https://github.com/modelcontextprotocol/ruby-sdk) (`mcp` gem).
+Transport is the [MCP Ruby SDK](https://github.com/modelcontextprotocol/ruby-sdk) (`mcp` gem, >= 1.0).
 
 OAuth provider is cribbed from [Doorkeeper](https://github.com/doorkeeper-gem/doorkeeper). Same table layout, same controller shapes. Not a dependency, just stole the design.
 

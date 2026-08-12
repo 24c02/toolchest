@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+- **Breaking (internal only):** MCP SDK upgraded from 0.11.0 to 1.1.0. Internal transport layer rewritten to use public SDK API. No user-facing API changes.
+- **Security:** Inherits all security fixes from MCP SDK 0.12–1.1: DNS rebinding protection, session flood DoS prevention, request body bounds, stdio frame bounds, duplicate initialize rejection, Content-Type validation.
+- `title:` on tool, resource, prompt macros
+- `output:` on tool macro (MCP output schema validation)
+- `mcp_elicit(message, schema:)` — ask the client's user for form input
+- `mcp_cancelled?` / `mcp_raise_if_cancelled!` — check/raise on client cancellation
+- Transport config: `allowed_hosts`, `allowed_origins`, `dns_rebinding_protection`, `session_idle_timeout`, `max_sessions`, `stateless`
+- Caching config: `page_size`, `cache_ttl`, `cache_scope`
+- `dispatch.toolchest` ActiveSupport::Notifications event
+- Integration test suite covering full MCP protocol handshake
+
 ## 0.3.6
 
 - `authorize_link`: gate which users can link MCP clients to their account. Runs before the OAuth consent screen; return falsy to reject with `access_denied`.
