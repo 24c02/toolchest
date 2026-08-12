@@ -60,6 +60,13 @@ module Toolchest
         end
       end
 
+      payload = {
+        tool: tool_name,
+        toolbox: definition.toolbox_class.name,
+        action: definition.method_name,
+        arguments: arguments
+      }
+
       start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       auth = Toolchest::Current.auth
       token_hint = extract_token_hint(auth)
@@ -74,6 +81,10 @@ module Toolchest
 
       duration = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000).round(1)
       log_request_complete(definition, response, duration)
+
+      payload[:duration] = duration
+      payload[:error] = response[:isError] || false
+      ActiveSupport::Notifications.instrument("dispatch.toolchest", payload)
 
       response
     end

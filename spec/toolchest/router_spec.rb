@@ -99,4 +99,24 @@ RSpec.describe Toolchest::Router do
       expect(result[:messages].first[:content]).to eq("Debug item 42")
     end
   end
+
+  describe "ActiveSupport::Notifications" do
+    it "instruments dispatch.toolchest on tool call" do
+      events = []
+      ActiveSupport::Notifications.subscribe("dispatch.toolchest") do |*args|
+        events << ActiveSupport::Notifications::Event.new(*args)
+      end
+
+      router.dispatch("items_index", {})
+
+      expect(events.length).to eq(1)
+      payload = events.first.payload
+      expect(payload[:tool]).to eq("items_index")
+      expect(payload[:toolbox]).to eq("ItemsToolbox")
+      expect(payload[:action]).to eq(:index)
+      expect(payload[:duration]).to be_a(Numeric)
+    ensure
+      ActiveSupport::Notifications.unsubscribe("dispatch.toolchest")
+    end
+  end
 end
