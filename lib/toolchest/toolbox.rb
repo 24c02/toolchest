@@ -48,10 +48,10 @@ module Toolchest
           .flat_map { |a| a.send(:own_prompts) }
       end
 
-      def tool(description, name: nil, access: nil, scope: nil, annotations: nil, &block)
+      def tool(description, name: nil, title: nil, access: nil, scope: nil, annotations: nil, output: nil, &block)
         builder = ToolBuilder.new
         builder.instance_eval(&block) if block
-        @_pending_tool = { description:, custom_name: name, access_level: access, scope:, annotations:, builder: }
+        @_pending_tool = { description:, custom_name: name, title:, access_level: access, scope:, annotations:, output_schema: output, builder: }
       end
 
       def default_param(name, type, description = "", **options)
@@ -67,11 +67,12 @@ module Toolchest
         }
       end
 
-      def resource(uri, name: nil, description: nil, &block)
+      def resource(uri, name: nil, title: nil, description: nil, &block)
         template = uri.include?("{")
         @_resources << {
           uri: uri,
           name: name || uri,
+          title: title,
           description: description,
           block: block,
           template: template,
@@ -79,9 +80,10 @@ module Toolchest
         }
       end
 
-      def prompt(prompt_name, description: nil, arguments: {}, &block)
+      def prompt(prompt_name, title: nil, description: nil, arguments: {}, &block)
         @_prompts << {
           name: prompt_name,
+          title: title,
           description: description,
           arguments: arguments,
           block: block,
@@ -111,9 +113,11 @@ module Toolchest
           params: params,
           toolbox_class: self,
           custom_name: pending[:custom_name],
+          title: pending[:title],
           access_level: pending[:access_level],
           scope: pending[:scope],
-          annotations: pending[:annotations]
+          annotations: pending[:annotations],
+          output_schema: pending[:output_schema]
         )
 
         @_tool_definitions[method_name.to_sym] = definition

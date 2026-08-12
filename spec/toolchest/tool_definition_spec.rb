@@ -119,4 +119,50 @@ RSpec.describe Toolchest::ToolDefinition do
       expect(schema[:properties].keys).to contain_exactly(:order_id, :status)
     end
   end
+
+  describe "#title" do
+    it "defaults to nil" do
+      expect(definition.title).to be_nil
+    end
+
+    it "includes title in schema when set" do
+      td = described_class.new(
+        method_name: :show,
+        description: "Look up an order",
+        params: params,
+        toolbox_class: toolbox_class,
+        title: "Show Order"
+      )
+      schema = td.to_mcp_schema
+      expect(schema[:title]).to eq("Show Order")
+    end
+
+    it "omits title from schema when nil" do
+      schema = definition.to_mcp_schema
+      expect(schema).not_to have_key(:title)
+    end
+  end
+
+  describe "#output_schema" do
+    it "defaults to nil" do
+      expect(definition.output_schema).to be_nil
+    end
+
+    it "includes output schema when set" do
+      td = described_class.new(
+        method_name: :show,
+        description: "Look up an order",
+        params: params,
+        toolbox_class: toolbox_class,
+        output_schema: { type: "object", properties: { id: { type: "string" } } }
+      )
+      schema = td.to_mcp_schema
+      expect(schema[:outputSchema]).to eq(type: "object", properties: { id: { type: "string" } })
+    end
+
+    it "omits output schema when nil" do
+      schema = definition.to_mcp_schema
+      expect(schema).not_to have_key(:outputSchema)
+    end
+  end
 end

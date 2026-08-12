@@ -30,5 +30,6 @@ RSpec.configure do |config|
 
   config.before(:each) do
     Toolchest.reset!
+    Toolchest::Current.reset
   end
 end

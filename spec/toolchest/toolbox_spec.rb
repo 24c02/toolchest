@@ -362,4 +362,72 @@ RSpec.describe Toolchest::Toolbox do
       )
     end
   end
+
+  describe "title: on tool macro" do
+    it "passes title through to tool definition" do
+      klass = Class.new(described_class) do
+        def self.name = "TitledToolbox"
+
+        tool "List things", title: "List All Things" do
+        end
+        def index; end
+      end
+
+      expect(klass.tool_definitions[:index].title).to eq("List All Things")
+    end
+
+    it "defaults title to nil" do
+      expect(toolbox_class.tool_definitions[:show].title).to be_nil
+    end
+  end
+
+  describe "output: on tool macro" do
+    it "passes output schema through to tool definition" do
+      out = { type: "object", properties: { id: { type: "string" } } }
+      klass = Class.new(described_class) do
+        def self.name = "OutputToolbox"
+
+        tool "Get item", output: out do
+          param :id, :string, "ID"
+        end
+        def show; end
+      end
+
+      expect(klass.tool_definitions[:show].output_schema).to eq(out)
+    end
+
+    it "defaults output schema to nil" do
+      expect(toolbox_class.tool_definitions[:show].output_schema).to be_nil
+    end
+  end
+
+  describe "title: on resource macro" do
+    it "passes title through to resource definition" do
+      klass = Class.new(described_class) do
+        def self.name = "ResourceToolbox"
+
+        resource "items://schema", name: "Schema", title: "Items Schema" do
+          { fields: ["id"] }
+        end
+      end
+
+      res = klass.resources.first
+      expect(res[:title]).to eq("Items Schema")
+    end
+  end
+
+  describe "title: on prompt macro" do
+    it "passes title through to prompt definition" do
+      klass = Class.new(described_class) do
+        def self.name = "PromptToolbox"
+
+        prompt "debug", title: "Debug Helper", description: "Debug tool" do |**args|
+          [{ role: "user", content: "debug" }]
+        end
+      end
+
+      p = klass.prompts.first
+      expect(p[:title]).to eq("Debug Helper")
+    end
+  end
 end

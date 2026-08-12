@@ -1,8 +1,8 @@
 module Toolchest
   class ToolDefinition
-    attr_reader :method_name, :description, :params, :toolbox_class, :custom_name, :access_level, :scope, :annotations
+    attr_reader :method_name, :description, :params, :toolbox_class, :custom_name, :access_level, :scope, :annotations, :title, :output_schema
 
-    def initialize(method_name:, description:, params:, toolbox_class:, custom_name: nil, access_level: nil, scope: nil, annotations: nil)
+    def initialize(method_name:, description:, params:, toolbox_class:, custom_name: nil, access_level: nil, scope: nil, annotations: nil, title: nil, output_schema: nil)
       @method_name = method_name.to_sym
       @description = description
       @params = params
@@ -11,6 +11,8 @@ module Toolchest
       @access_level = access_level
       @scope = scope ? Array(scope) : nil
       @annotations = annotations
+      @title = title
+      @output_schema = output_schema
     end
 
     def tool_name(naming_strategy = nil)
@@ -25,6 +27,8 @@ module Toolchest
         description: @description,
         inputSchema: input_schema
       }
+      schema[:title] = @title if @title
+      schema[:outputSchema] = @output_schema if @output_schema
       hints = resolved_annotations
       schema[:annotations] = hints if hints.any?
       schema

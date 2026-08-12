@@ -118,14 +118,18 @@ module Toolchest
     def build_mcp_tool(td, router, naming)
       tn = td.tool_name(naming)
       desc = td.description
+      ttl = td.title
       schema = td.input_schema
+      out_schema = td.output_schema
       hints = td.resolved_annotations
       r = router
 
       Class.new(MCP::Tool) do
         tool_name tn
+        title ttl if ttl
         description desc
         input_schema schema
+        output_schema out_schema if out_schema
 
         if hints.any?
           annotations({
@@ -156,6 +160,7 @@ module Toolchest
 
     def build_mcp_prompt(pdef, router)
       pn = pdef[:name]
+      pt = pdef[:title]
       desc = pdef[:description]
       args_list = (pdef[:arguments] || {}).map { |name, opts|
         MCP::Prompt::Argument.new(
@@ -168,6 +173,7 @@ module Toolchest
 
       Class.new(MCP::Prompt) do
         prompt_name pn
+        title pt if pt
         description desc
         arguments args_list
 
@@ -184,13 +190,13 @@ module Toolchest
     def build_mcp_resources(router)
       router.toolbox_classes.flat_map(&:resources)
         .reject { |r| r[:template] }
-        .map { |r| MCP::Resource.new(uri: r[:uri], name: r[:name], description: r[:description]) }
+        .map { |r| MCP::Resource.new(uri: r[:uri], name: r[:name], title: r[:title], description: r[:description]) }
     end
 
     def build_mcp_resource_templates(router)
       router.toolbox_classes.flat_map(&:resources)
         .select { |r| r[:template] }
-        .map { |r| MCP::ResourceTemplate.new(uri_template: r[:uri], name: r[:name], description: r[:description]) }
+        .map { |r| MCP::ResourceTemplate.new(uri_template: r[:uri], name: r[:name], title: r[:title], description: r[:description]) }
     end
 
     # --- Auth ---
