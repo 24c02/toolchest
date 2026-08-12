@@ -2,7 +2,7 @@ PATH
   remote: .
   specs:
     toolchest (0.3.7)
-      mcp (>= 0.10)
+      mcp (>= 1.0)
       rails (>= 7.0)
 
 GEM
@@ -82,10 +82,8 @@ GEM
       securerandom (>= 0.3)
       tzinfo (~> 2.0, >= 2.0.5)
       uri (>= 0.13.1)
-    addressable (2.9.0)
-      public_suffix (>= 2.0.2, < 8.0)
     base64 (0.3.0)
-    bigdecimal (4.1.1)
+    bigdecimal (4.1.2)
     builder (3.3.0)
     concurrent-ruby (1.3.6)
     connection_pool (3.0.2)
@@ -97,6 +95,7 @@ GEM
     erubi (1.13.1)
     globalid (1.3.0)
       activesupport (>= 6.1)
+    hana (1.3.7)
     i18n (1.14.8)
       concurrent-ruby (~> 1.0)
     io-console (0.8.2)
@@ -107,9 +106,11 @@ GEM
       reline (>= 0.4.2)
     jb (0.8.2)
     json (2.19.3)
-    json-schema (6.2.0)
-      addressable (~> 2.8)
-      bigdecimal (>= 3.1, < 5)
+    json_schemer (2.5.0)
+      bigdecimal
+      hana (~> 1.3)
+      regexp_parser (~> 2.0)
+      simpleidn (~> 0.2)
     logger (1.7.0)
     loofah (2.25.1)
       crass (~> 1.0.2)
@@ -121,8 +122,8 @@ GEM
       net-pop
       net-smtp
     marcel (1.1.0)
-    mcp (0.11.0)
-      json-schema (>= 4.1)
+    mcp (1.1.0)
+      json_schemer (>= 2.4)
     mini_mime (1.1.5)
     minitest (6.0.3)
       drb (~> 2.0)
@@ -160,7 +161,6 @@ GEM
     psych (5.3.1)
       date
       stringio
-    public_suffix (7.0.5)
     racc (1.8.1)
     rack (3.2.6)
     rack-session (2.1.2)
@@ -205,6 +205,7 @@ GEM
       erb
       psych (>= 4.0.0)
       tsort
+    regexp_parser (2.12.0)
     reline (0.6.3)
       io-console (~> 0.5)
     rspec-core (3.13.6)
@@ -225,6 +226,7 @@ GEM
       rspec-support (>= 3.13.0, < 5.0.0)
     rspec-support (3.13.7)
     securerandom (0.4.1)
+    simpleidn (0.2.3)
     sqlite3 (2.9.2-aarch64-linux-gnu)
     sqlite3 (2.9.2-aarch64-linux-musl)
     sqlite3 (2.9.2-arm-linux-gnu)
