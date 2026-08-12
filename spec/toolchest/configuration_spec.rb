@@ -43,6 +43,21 @@ RSpec.describe Toolchest::Configuration do
     it "defaults toolbox_module to nil" do
       expect(config.toolbox_module).to be_nil
     end
+
+    it "defaults transport security to nil/false" do
+      expect(config.allowed_hosts).to be_nil
+      expect(config.allowed_origins).to be_nil
+      expect(config.dns_rebinding_protection).to be_nil
+      expect(config.session_idle_timeout).to be_nil
+      expect(config.max_sessions).to be_nil
+      expect(config.stateless).to be false
+    end
+
+    it "defaults pagination and caching to nil" do
+      expect(config.page_size).to be_nil
+      expect(config.cache_ttl).to be_nil
+      expect(config.cache_scope).to be_nil
+    end
   end
 
   describe "#authenticate" do
@@ -189,6 +204,35 @@ RSpec.describe Toolchest::Configuration do
 
     it "defaults to :default" do
       expect(config.mount_key).to eq(:default)
+    end
+  end
+
+  describe "#transport_options" do
+    it "returns empty hash with defaults" do
+      expect(config.transport_options).to eq({})
+    end
+
+    it "includes configured transport security options" do
+      config.allowed_hosts = ["mcp.example.com"]
+      config.allowed_origins = ["https://app.example.com"]
+      config.dns_rebinding_protection = false
+      config.session_idle_timeout = 3600
+      config.max_sessions = 500
+      config.stateless = true
+
+      opts = config.transport_options
+      expect(opts[:allowed_hosts]).to eq(["mcp.example.com"])
+      expect(opts[:allowed_origins]).to eq(["https://app.example.com"])
+      expect(opts[:dns_rebinding_protection]).to be false
+      expect(opts[:session_idle_timeout]).to eq(3600)
+      expect(opts[:max_sessions]).to eq(500)
+      expect(opts[:stateless]).to be true
+    end
+
+    it "omits nil values" do
+      config.allowed_hosts = ["example.com"]
+      opts = config.transport_options
+      expect(opts.keys).to eq([:allowed_hosts])
     end
   end
 end

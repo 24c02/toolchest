@@ -7,7 +7,10 @@ module Toolchest
                   :scopes, :login_path, :additional_view_paths,
                   :access_token_expires_in, :toolboxes, :toolbox_module,
                   :mount_key, :mount_path,
-                  :optional_scopes, :required_scopes
+                  :optional_scopes, :required_scopes,
+                  :allowed_hosts, :allowed_origins, :dns_rebinding_protection,
+                  :session_idle_timeout, :max_sessions, :stateless,
+                  :page_size, :cache_ttl, :cache_scope
     attr_reader :auth
 
     def initialize(mount_key = :default)
@@ -28,6 +31,15 @@ module Toolchest
       @access_token_expires_in = 7200
       @toolboxes = nil
       @toolbox_module = nil
+      @allowed_hosts = nil
+      @allowed_origins = nil
+      @dns_rebinding_protection = nil
+      @session_idle_timeout = nil
+      @max_sessions = nil
+      @stateless = false
+      @page_size = nil
+      @cache_ttl = nil
+      @cache_scope = nil
     end
 
     def auth=(value)
@@ -92,5 +104,16 @@ module Toolchest
     end
 
     def resolved_server_name = @server_name || (defined?(Rails) && Rails.application ? Rails.application.class.module_parent_name : "Toolchest")
+
+    def transport_options
+      opts = {}
+      opts[:allowed_hosts] = @allowed_hosts if @allowed_hosts
+      opts[:allowed_origins] = @allowed_origins if @allowed_origins
+      opts[:dns_rebinding_protection] = @dns_rebinding_protection unless @dns_rebinding_protection.nil?
+      opts[:session_idle_timeout] = @session_idle_timeout if @session_idle_timeout
+      opts[:max_sessions] = @max_sessions if @max_sessions
+      opts[:stateless] = @stateless if @stateless
+      opts
+    end
   end
 end
