@@ -31,6 +31,7 @@ module Toolchest
           }, status: :bad_request
         end
 
+        dangerous_schemes = %w[javascript data vbscript].freeze
         uris.each do |u|
           begin
             parsed = URI.parse(u)
@@ -38,6 +39,12 @@ module Toolchest
               return render json: {
                 error: "invalid_client_metadata",
                 error_description: "Redirect URI must have a scheme and host"
+              }, status: :bad_request
+            end
+            if dangerous_schemes.include?(parsed.scheme.downcase)
+              return render json: {
+                error: "invalid_client_metadata",
+                error_description: "Redirect URI scheme is not allowed"
               }, status: :bad_request
             end
           rescue URI::InvalidURIError
