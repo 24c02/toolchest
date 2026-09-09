@@ -4,6 +4,17 @@
 
 - **Breaking (internal only):** MCP SDK upgraded from 0.11.0 to 1.1.0. Internal transport layer rewritten to use public SDK API. No user-facing API changes.
 - **Security:** Inherits all security fixes from MCP SDK 0.12–1.1: DNS rebinding protection, session flood DoS prevention, request body bounds, stdio frame bounds, duplicate initialize rejection, Content-Type validation.
+- **Security:** Refresh token rotation is now atomic — prevents race-condition double-minting on concurrent requests.
+- **Security:** Refresh token exchange verifies `client_id` — a leaked refresh token can't be used from a different client.
+- **Security:** Explicit CSRF protection (`protect_from_forgery`) on the engine's consent screen controller. No longer depends on host app having it enabled.
+- **Security:** `X-Frame-Options: DENY` on all engine HTML pages — consent screen can't be iframed for clickjacking.
+- **Security:** PKCE is now mandatory for all clients. The `confidential` flag no longer bypasses it.
+- **Security:** `client_id` is required at token exchange (was optional).
+- **Security:** `code_challenge_method` must be `S256` — `plain` is rejected per OAuth 2.1.
+- **Security:** `response_type` must be `code` — implicit flow requests rejected.
+- **Security:** Authorization code lookup scoped by `mount_key` — cross-mount code exchange prevented.
+- **Security:** Redirect URI registration rejects dangerous schemes (`javascript:`, `data:`, `vbscript:`) and URIs without a scheme/host.
+- **Security:** Bearer token extraction no longer captures trailing whitespace.
 - `title:` on tool, resource, prompt macros
 - `output:` on tool macro (MCP output schema validation)
 - `mcp_elicit(message, schema:)` — ask the client's user for form input
